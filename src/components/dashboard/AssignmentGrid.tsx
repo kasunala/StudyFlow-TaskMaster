@@ -53,6 +53,7 @@ const AssignmentGrid = ({
           {assignments.map((assignment) => (
             <AssignmentCard
               key={assignment.id}
+              id={assignment.id}
               title={assignment.title}
               description={assignment.description}
               dueDate={assignment.dueDate}

@@ -25,6 +25,7 @@ interface Task {
 }
 
 interface AssignmentCardProps {
+  id?: string;
   title?: string;
   description?: string;
   dueDate?: string;
@@ -41,6 +42,7 @@ interface AssignmentCardProps {
 }
 
 const AssignmentCard = ({
+  id = "",
   title = "Sample Assignment",
   description = "This is a sample assignment description",
   dueDate = "2024-04-30",
@@ -148,7 +150,7 @@ const AssignmentCard = ({
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
         assignment={{
-          id: "assignment-id", // This ID will be overridden by the parent component
+          id,
           title,
           description,
           dueDate,
