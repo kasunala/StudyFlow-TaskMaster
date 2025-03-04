@@ -197,7 +197,16 @@ const OnboardingDialog = ({
         <DialogFooter>
           <Button
             type="button"
-            onClick={handleSubmit}
+            onClick={async (e) => {
+              e.preventDefault();
+              console.log("Create Assignment button clicked");
+              try {
+                await handleSubmit();
+                console.log("Assignment created successfully");
+              } catch (error) {
+                console.error("Error creating assignment:", error);
+              }
+            }}
             disabled={!title || !dueDate}
           >
             Create Assignment
