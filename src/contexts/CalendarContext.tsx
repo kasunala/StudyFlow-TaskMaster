@@ -39,6 +39,7 @@ export interface CalendarTask {
   startTime?: string; // Format: "HH:MM" (24-hour format)
   endTime?: string; // Format: "HH:MM" (24-hour format)
   duration?: number; // Duration in minutes
+  date?: string; // ISO date string format YYYY-MM-DD
 }
 
 interface CalendarContextType {

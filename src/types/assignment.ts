@@ -10,4 +10,5 @@ export interface Assignment {
   description: string;
   dueDate: string;
   tasks: Task[];
+  _delete?: boolean;
 }

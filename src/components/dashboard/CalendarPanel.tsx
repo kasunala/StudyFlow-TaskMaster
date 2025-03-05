@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useTimeFormat } from "@/contexts/TimeFormatContext";
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -60,28 +61,33 @@ interface CalendarPanelProps {
   ) => void;
 }
 
-// Generate time slots from 8:00 AM to 10:00 PM in 60-minute increments
+// Generate time slots for the calendar view (hourly increments)
 const generateTimeSlots = () => {
   const slots = [];
-  for (let hour = 8; hour <= 22; hour++) {
+  for (let hour = 0; hour < 24; hour++) {
     const hourFormatted = hour.toString().padStart(2, "0");
     slots.push(`${hourFormatted}:00`);
   }
-  // Add one final slot to show the end time
-  slots.push("23:00");
+  // Add the last slot (midnight of next day)
+  slots.push("00:00");
   return slots;
 };
 
-// Format time for display (convert from 24h to 12h format)
-const formatTimeForDisplay = (time: string) => {
-  if (!time) return "";
-  const [hourStr, minuteStr] = time.split(":");
-  const hour = parseInt(hourStr);
-  const minute = minuteStr;
-  const amPm = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 || 12;
-  return `${hour12}:${minute} ${amPm}`;
+// Generate time slots for the time selection dropdown (15-minute increments)
+const generateTimeSelectionSlots = () => {
+  const slots = [];
+  for (let hour = 0; hour <= 23; hour++) {
+    const hourFormatted = hour.toString().padStart(2, "0");
+    for (let minute = 0; minute < 60; minute += 15) {
+      const minuteFormatted = minute.toString().padStart(2, "0");
+      slots.push(`${hourFormatted}:${minuteFormatted}`);
+    }
+  }
+  return slots;
 };
+
+// This function is now just a wrapper around the context's formatTime function
+// It will be initialized in the component
 
 // Calculate end time based on start time and duration
 const calculateEndTime = (
@@ -100,6 +106,7 @@ const calculateEndTime = (
 };
 
 const TIME_SLOTS = generateTimeSlots();
+const TIME_SELECTION_SLOTS = generateTimeSelectionSlots();
 
 // Calculate the top position for a task based on its start time
 const calculateTaskPosition = (startTime: string): number => {
@@ -107,9 +114,9 @@ const calculateTaskPosition = (startTime: string): number => {
   const [hourStr, minuteStr] = startTime.split(":");
   const [hour, minute] = [parseInt(hourStr), parseInt(minuteStr)];
 
-  // Each hour is 60px tall, starting from 8:00 AM (0px)
-  const minutesSince8AM = (hour - 8) * 60 + minute;
-  return (minutesSince8AM / 60) * 60; // 60px per hour
+  // Each hour is 60px tall, starting from 12:00 AM (0px)
+  const minutesSinceMidnight = hour * 60 + minute;
+  return (minutesSinceMidnight / 60) * 60; // 60px per hour
 };
 
 // Calculate the height of a task based on its duration
@@ -125,6 +132,14 @@ const CalendarPanel = ({
   onToggleTask = () => {},
   onUpdateTaskTime = () => {},
 }: CalendarPanelProps) => {
+  // Get time format functions from context
+  const { timeFormat, toggleTimeFormat, formatTime } = useTimeFormat();
+
+  // Format time for display based on current format preference
+  const formatTimeForDisplay = (time: string) => {
+    if (!time) return "";
+    return formatTime(time);
+  };
   const [hoveredTimeSlot, setHoveredTimeSlot] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [visibleTimeSlots, setVisibleTimeSlots] = useState(TIME_SLOTS);
@@ -140,28 +155,222 @@ const CalendarPanel = ({
 
   // Update current time every minute
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000); // Update every minute
+    // Set initial time immediately
+    const updateCurrentTime = () => {
+      const now = new Date();
+      console.log("Current time updated:", now.toLocaleTimeString());
+      setCurrentTime(now);
+
+      // Force redraw of the current time indicator
+      const timeIndicator = document.querySelector(".current-time-indicator");
+      if (timeIndicator) {
+        timeIndicator.classList.remove("current-time-indicator");
+        void timeIndicator.offsetHeight;
+        timeIndicator.classList.add("current-time-indicator");
+      }
+    };
+
+    updateCurrentTime();
+
+    const timer = setInterval(updateCurrentTime, 60000); // Update every minute
 
     return () => clearInterval(timer);
   }, []);
 
+  // Listen for focus-calendar-task events
+  useEffect(() => {
+    const handleFocusTask = (event: any) => {
+      console.log("Focus calendar task event received", event.detail);
+      const { taskId } = event.detail;
+
+      // Find the task in calendar tasks
+      const task = calendarTasks.find((task) => task.id === taskId);
+      console.log("Found task:", task);
+
+      if (task) {
+        // Set the selected date to the task's date
+        if (task.date) {
+          // Create a new Date object from the ISO string
+          const taskDate = new Date(task.date);
+          console.log("Setting calendar to date:", taskDate);
+
+          // Update the month and year state variables to match the task date
+          setSelectedMonth(taskDate.getMonth());
+          setSelectedYear(taskDate.getFullYear());
+          setSelectedDate(taskDate);
+        }
+
+        // Make sure we're in day view
+        setShowMonthView(false);
+
+        // Use a longer delay to ensure the DOM has updated
+        setTimeout(() => {
+          // Try to find the task element
+          const taskElement = document.getElementById(
+            `calendar-task-${taskId}`,
+          );
+          console.log("Task element found:", taskElement);
+
+          if (taskElement) {
+            // Force a reflow
+            void taskElement.offsetHeight;
+
+            // Add highlight class
+            taskElement.classList.add("highlight-task");
+            console.log("Added highlight class to element");
+
+            // Scroll the task into view
+            taskElement.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+            console.log("Scrolled element into view");
+
+            // Remove highlight after 3 seconds
+            setTimeout(() => {
+              taskElement.classList.remove("highlight-task");
+            }, 3000);
+          } else {
+            console.error("Task element not found in DOM for ID:", taskId);
+
+            // If element not found, try again with a longer delay
+            setTimeout(() => {
+              const retryTaskElement = document.getElementById(
+                `calendar-task-${taskId}`,
+              );
+              console.log("Retry task element found:", retryTaskElement);
+
+              if (retryTaskElement) {
+                // Force a reflow
+                void retryTaskElement.offsetHeight;
+
+                // Add highlight class
+                retryTaskElement.classList.add("highlight-task");
+                console.log("Added highlight class to element (retry)");
+
+                // Scroll the task into view
+                retryTaskElement.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+                console.log("Scrolled element into view (retry)");
+
+                // Remove highlight after 3 seconds
+                setTimeout(() => {
+                  retryTaskElement.classList.remove("highlight-task");
+                }, 3000);
+              } else {
+                console.error(
+                  "Task element still not found after retry for ID:",
+                  taskId,
+                );
+              }
+            }, 500);
+          }
+        }, 300); // Increased delay to ensure DOM is ready
+      } else {
+        console.error("Task not found in calendar tasks for ID:", taskId);
+      }
+    };
+
+    // Use a direct function reference for the event listener
+    window.addEventListener("focus-calendar-task", handleFocusTask);
+
+    return () => {
+      window.removeEventListener("focus-calendar-task", handleFocusTask);
+    };
+  }, [calendarTasks]);
+
   // Format selected date as ISO string (YYYY-MM-DD)
-  const selectedDateISO = selectedDate.toISOString().split("T")[0];
+  // Ensure we're working with a proper Date object and using local timezone
+  const selectedDateISO =
+    selectedDate instanceof Date
+      ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
+      : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
 
   // Filter tasks for the selected date
   const filteredTasks = calendarTasks.filter((task) => {
-    // If task has no date, assign it today's date for the demo
+    // If task has no date, assign it today's date for the demo using local timezone
     if (!task.date) {
-      task.date = new Date().toISOString().split("T")[0];
+      const today = new Date();
+      task.date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     }
     return task.date === selectedDateISO;
   });
 
+  // Check if a new task would overlap with existing tasks
+  const checkForOverlap = (
+    startTime: string,
+    duration: number,
+    taskIdToExclude?: string,
+  ): boolean => {
+    // Only check tasks for the selected date
+    const tasksForDay = taskIdToExclude
+      ? filteredTasks.filter((task) => task.id !== taskIdToExclude)
+      : filteredTasks;
+
+    // Convert the new task's start and end times to minutes since midnight
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const startMinutes = startHour * 60 + startMinute;
+    const endMinutes = startMinutes + duration;
+
+    // Check against each existing task
+    for (const task of tasksForDay) {
+      if (!task.startTime) continue;
+
+      const [taskStartHour, taskStartMinute] = task.startTime
+        .split(":")
+        .map(Number);
+      const taskStartMinutes = taskStartHour * 60 + taskStartMinute;
+      const taskEndMinutes = taskStartMinutes + (task.duration || 30);
+
+      // Check for overlap
+      if (
+        (startMinutes >= taskStartMinutes && startMinutes < taskEndMinutes) || // New task starts during existing task
+        (endMinutes > taskStartMinutes && endMinutes <= taskEndMinutes) || // New task ends during existing task
+        (startMinutes <= taskStartMinutes && endMinutes >= taskEndMinutes) // New task completely contains existing task
+      ) {
+        return true; // Overlap detected
+      }
+    }
+
+    return false; // No overlap
+  };
+
+  // Find the next available time slot after a given time
+  const findNextAvailableSlot = (
+    startTime: string,
+    duration: number,
+  ): string => {
+    // Start with the given time
+    let [hour, minute] = startTime.split(":").map(Number);
+    let currentMinutes = hour * 60 + minute;
+
+    // Try each possible time slot in 30-minute increments
+    while (currentMinutes < 23 * 60) {
+      // Until 11:00 PM
+      const currentTimeString = `${Math.floor(currentMinutes / 60)
+        .toString()
+        .padStart(
+          2,
+          "0",
+        )}:${(currentMinutes % 60).toString().padStart(2, "0")}`;
+
+      if (!checkForOverlap(currentTimeString, duration)) {
+        return currentTimeString;
+      }
+
+      // Move to next 30-minute slot
+      currentMinutes += 30;
+    }
+
+    // If no slot is found, return the original time (this should be rare)
+    return startTime;
+  };
+
   // Drop handler for the entire calendar
   const [{ isOver }, drop] = useDrop(() => ({
-    accept: "task",
+    accept: ["task", "calendar-task"],
     hover: (item, monitor) => {
       if (!calendarGridRef.current) return;
 
@@ -188,16 +397,25 @@ const CalendarPanel = ({
     ) => {
       if (!calendarGridRef.current || !hoveredTimeSlot) return;
 
-      // Calculate end time (default 30 min duration)
-      const endTime = calculateEndTime(hoveredTimeSlot, 30);
+      const duration = 30; // Default duration
+
+      // Check if the selected time slot would cause an overlap
+      let finalTimeSlot = hoveredTimeSlot;
+      if (checkForOverlap(hoveredTimeSlot, duration)) {
+        // Find the next available time slot
+        finalTimeSlot = findNextAvailableSlot(hoveredTimeSlot, duration);
+      }
+
+      // Calculate end time based on the final time slot
+      const endTime = calculateEndTime(finalTimeSlot, duration);
 
       onAddTask({
         ...item,
         assignmentId: item.assignmentId,
         assignmentTitle: item.assignmentTitle,
-        startTime: hoveredTimeSlot,
+        startTime: finalTimeSlot,
         endTime: endTime,
-        duration: 30,
+        duration: duration,
         date: selectedDateISO,
       });
 
@@ -263,69 +481,347 @@ const CalendarPanel = ({
 
     const top = calculateTaskPosition(task.startTime || "08:00");
     const height = calculateTaskHeight(task.duration || 30);
+    const isShortTask = (task.duration || 30) < 30;
 
     return (
       <div
+        id={`calendar-task-${task.id}`}
         ref={preview}
-        className={`absolute left-[60px] right-4 rounded-md px-2 py-1 ${task.completed ? "bg-gray-100" : "bg-blue-100"} ${isDragging ? "opacity-50" : ""} border border-gray-300 shadow-sm`}
+        className={`absolute left-[70px] right-4 rounded-md px-2 py-1 ${task.completed ? "bg-gray-100 dark:bg-gray-700" : "bg-blue-100 dark:bg-blue-900"} ${isDragging ? "opacity-50" : ""} border border-gray-300 dark:border-gray-600 shadow-sm transition-all duration-300`}
         style={{
           top: `${top}px`,
           height: `${height}px`,
           zIndex: isEditing ? 10 : 1,
         }}
+        title={`${task.assignmentTitle}: ${task.title} (${formatTimeForDisplay(task.startTime || "")} - ${formatTimeForDisplay(task.endTime || "")})`}
       >
         {isEditing && (
           <div className="absolute inset-0 bg-black bg-opacity-20 rounded-md z-0"></div>
         )}
         <div className="flex items-start h-full relative z-10">
           <div ref={drag} className="cursor-move mr-1 mt-1 flex-shrink-0">
-            <GripVertical className="h-3 w-3 text-gray-500" />
+            <GripVertical className="h-3 w-3 text-gray-500 dark:text-gray-400" />
           </div>
 
-          <div className="flex-1 overflow-hidden">
-            <div className="flex items-center justify-between">
-              <h4
-                className={`text-xs font-medium truncate ${task.completed ? "line-through text-gray-500" : ""}`}
-              >
-                {task.title}
-              </h4>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-4 w-4 -mr-1"
-                onClick={() => onRemoveTask(task.id)}
-              >
-                <span className="text-xs">×</span>
-              </Button>
-            </div>
-
-            <p className="text-xs text-gray-500 truncate">
-              {formatTimeForDisplay(task.startTime || "")} -{" "}
-              {formatTimeForDisplay(task.endTime || "")}
-            </p>
+          <div className="flex-1 overflow-hidden relative">
+            {isShortTask ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {formatTimeForDisplay(task.startTime || "")} -{" "}
+                    {formatTimeForDisplay(task.endTime || "")}
+                  </p>
+                  <div className="flex items-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 text-xs p-0"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4 -mr-1 ml-1"
+                      onClick={() => onRemoveTask(task.id)}
+                    >
+                      <span className="text-xs">×</span>
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <h4
+                    className={`text-xs font-medium italic truncate ${task.completed ? "line-through text-gray-500 dark:text-gray-500" : "text-foreground"}`}
+                    title={`${task.assignmentTitle}: ${task.title}`}
+                  >
+                    {task.title.length > 10 ? "..." : task.title}
+                  </h4>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {formatTimeForDisplay(task.startTime || "")} -{" "}
+                    {formatTimeForDisplay(task.endTime || "")}
+                  </p>
+                  <div className="flex items-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 text-xs p-0"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4 -mr-1 ml-1"
+                      onClick={() => onRemoveTask(task.id)}
+                    >
+                      <span className="text-xs">×</span>
+                    </Button>
+                  </div>
+                </div>
+                <h4
+                  className={`text-xs font-medium italic truncate ${task.completed ? "line-through text-gray-500 dark:text-gray-500" : "text-foreground"}`}
+                  title={`${task.assignmentTitle}: ${task.title}`}
+                >
+                  {task.title}
+                </h4>
+              </>
+            )}
 
             {isEditing && (
-              <div className="mt-1 space-y-2 bg-white bg-opacity-90 p-1 rounded">
-                <div className="flex items-center space-x-1">
-                  <span className="text-xs">Duration:</span>
-                  <Slider
-                    value={[sliderValue]}
-                    min={15}
-                    max={120}
-                    step={15}
-                    className="flex-1"
-                    onValueChange={(value) => {
-                      const duration = value[0];
-                      setSliderValue(duration);
-                      onUpdateTaskTime(
-                        task.id,
+              <div className="mt-1 space-y-2 bg-white dark:bg-gray-800 bg-opacity-90 p-1 rounded">
+                <div className="flex items-center space-x-1 flex-col">
+                  <div className="flex items-center w-full mb-1">
+                    <span className="text-xs mr-2">Duration:</span>
+                    <div
+                      className={`flex-1 ${checkForOverlap(task.startTime || "08:00", sliderValue, task.id) && sliderValue > (task.duration || 30) ? "bg-red-100 rounded p-1" : ""}`}
+                    >
+                      <Slider
+                        value={[sliderValue]}
+                        min={15}
+                        max={120}
+                        step={15}
+                        className="flex-1"
+                        onValueChange={(value) => {
+                          const duration = value[0];
+                          setSliderValue(duration);
+                        }}
+                        onValueCommit={(value) => {
+                          const duration = value[0];
+
+                          // Check if the new duration would cause an overlap (excluding the current task)
+                          const wouldOverlap = checkForOverlap(
+                            task.startTime || "08:00",
+                            duration,
+                            task.id,
+                          );
+
+                          // If it would overlap, find the maximum duration that doesn't overlap
+                          if (
+                            wouldOverlap &&
+                            duration > (task.duration || 30)
+                          ) {
+                            // Find the maximum duration that doesn't overlap
+                            let maxDuration = task.duration || 30;
+                            while (maxDuration < duration) {
+                              if (
+                                !checkForOverlap(
+                                  task.startTime || "08:00",
+                                  maxDuration + 15,
+                                  task.id,
+                                )
+                              ) {
+                                maxDuration += 15;
+                              } else {
+                                break;
+                              }
+                            }
+
+                            // Use the maximum non-overlapping duration
+                            onUpdateTaskTime(
+                              task.id,
+                              task.startTime || "08:00",
+                              calculateEndTime(
+                                task.startTime || "08:00",
+                                maxDuration,
+                              ),
+                              maxDuration,
+                            );
+                            setSliderValue(maxDuration);
+                          } else {
+                            // No overlap or reducing duration, proceed normally
+                            onUpdateTaskTime(
+                              task.id,
+                              task.startTime || "08:00",
+                              calculateEndTime(
+                                task.startTime || "08:00",
+                                duration,
+                              ),
+                              duration,
+                            );
+                          }
+                        }}
+                      />
+                      {checkForOverlap(
                         task.startTime || "08:00",
-                        calculateEndTime(task.startTime || "08:00", duration),
-                        duration,
-                      );
-                    }}
-                  />
-                  <span className="text-xs w-8 text-right">{sliderValue}m</span>
+                        sliderValue,
+                        task.id,
+                      ) &&
+                        sliderValue > (task.duration || 30) && (
+                          <div className="text-xs text-red-500 mt-1">
+                            Overlap detected - will adjust automatically
+                          </div>
+                        )}
+                    </div>
+                    <span className="text-xs w-8 text-right ml-2">
+                      {sliderValue}m
+                    </span>
+                  </div>
+
+                  {/* Manual time selection */}
+                  <div className="flex items-center w-full mb-1 mt-2">
+                    <span className="text-xs mr-2">Time:</span>
+                    <div className="flex-1 flex space-x-2">
+                      <Select
+                        value={task.startTime || "08:00"}
+                        onValueChange={(value) => {
+                          const newStartTime = value;
+                          const newEndTime = calculateEndTime(
+                            newStartTime,
+                            sliderValue,
+                          );
+
+                          // Check for overlaps
+                          if (
+                            !checkForOverlap(newStartTime, sliderValue, task.id)
+                          ) {
+                            onUpdateTaskTime(
+                              task.id,
+                              newStartTime,
+                              newEndTime,
+                              sliderValue,
+                            );
+                          } else {
+                            // Find next available slot
+                            const nextAvailableSlot = findNextAvailableSlot(
+                              newStartTime,
+                              sliderValue,
+                            );
+                            onUpdateTaskTime(
+                              task.id,
+                              nextAvailableSlot,
+                              calculateEndTime(nextAvailableSlot, sliderValue),
+                              sliderValue,
+                            );
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-full text-xs h-8">
+                          <SelectValue placeholder="Start time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TIME_SELECTION_SLOTS.map((time) => (
+                            <SelectItem
+                              key={time}
+                              value={time}
+                              className="text-xs"
+                            >
+                              {formatTimeForDisplay(time)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <span className="text-xs flex items-center">to</span>
+
+                      <Select
+                        value={
+                          task.endTime ||
+                          calculateEndTime(
+                            task.startTime || "08:00",
+                            sliderValue,
+                          )
+                        }
+                        onValueChange={(value) => {
+                          const newEndTime = value;
+                          const startTime = task.startTime || "08:00";
+
+                          // Calculate duration in minutes
+                          const [startHour, startMinute] = startTime
+                            .split(":")
+                            .map(Number);
+                          const [endHour, endMinute] = newEndTime
+                            .split(":")
+                            .map(Number);
+
+                          const startMinutes = startHour * 60 + startMinute;
+                          const endMinutes = endHour * 60 + endMinute;
+
+                          // Ensure end time is after start time
+                          if (endMinutes <= startMinutes) return;
+
+                          const newDuration = endMinutes - startMinutes;
+
+                          // Check for overlaps
+                          if (
+                            !checkForOverlap(startTime, newDuration, task.id)
+                          ) {
+                            onUpdateTaskTime(
+                              task.id,
+                              startTime,
+                              newEndTime,
+                              newDuration,
+                            );
+                            setSliderValue(newDuration);
+                          } else {
+                            // Find maximum non-overlapping duration
+                            let maxDuration = task.duration || 30;
+                            while (maxDuration < newDuration) {
+                              if (
+                                !checkForOverlap(
+                                  startTime,
+                                  maxDuration + 15,
+                                  task.id,
+                                )
+                              ) {
+                                maxDuration += 15;
+                              } else {
+                                break;
+                              }
+                            }
+
+                            const adjustedEndTime = calculateEndTime(
+                              startTime,
+                              maxDuration,
+                            );
+                            onUpdateTaskTime(
+                              task.id,
+                              startTime,
+                              adjustedEndTime,
+                              maxDuration,
+                            );
+                            setSliderValue(maxDuration);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-full text-xs h-8">
+                          <SelectValue placeholder="End time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TIME_SELECTION_SLOTS.filter((time) => {
+                            // Only show times after the start time
+                            const [startHour, startMinute] = (
+                              task.startTime || "08:00"
+                            )
+                              .split(":")
+                              .map(Number);
+                            const [timeHour, timeMinute] = time
+                              .split(":")
+                              .map(Number);
+                            return (
+                              timeHour > startHour ||
+                              (timeHour === startHour &&
+                                timeMinute > startMinute)
+                            );
+                          }).map((time) => (
+                            <SelectItem
+                              key={time}
+                              value={time}
+                              className="text-xs"
+                            >
+                              {formatTimeForDisplay(time)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex justify-between">
@@ -346,17 +842,6 @@ const CalendarPanel = ({
                 </div>
               </div>
             )}
-
-            {!isEditing && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-1 h-5 text-xs p-0"
-                onClick={() => setIsEditing(true)}
-              >
-                Edit
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -370,18 +855,26 @@ const CalendarPanel = ({
       drop: (item: any) => {
         // Calculate end time (default 30 min duration)
         const duration = item.duration || 30;
-        const endTime = calculateEndTime(time, duration);
+
+        // Check if the selected time slot would cause an overlap (excluding the task being moved)
+        let finalTimeSlot = time;
+        if (checkForOverlap(time, duration, item.id)) {
+          // Find the next available time slot
+          finalTimeSlot = findNextAvailableSlot(time, duration);
+        }
+
+        const endTime = calculateEndTime(finalTimeSlot, duration);
 
         // If it's a calendar task being moved, use its existing properties
         if (item.startTime) {
-          onUpdateTaskTime(item.id, time, endTime, duration);
+          onUpdateTaskTime(item.id, finalTimeSlot, endTime, duration);
         } else {
           // It's a new task being added from assignments
           onAddTask({
             ...item,
             assignmentId: item.assignmentId,
             assignmentTitle: item.assignmentTitle,
-            startTime: time,
+            startTime: finalTimeSlot,
             endTime: endTime,
             duration: duration,
             date: selectedDateISO,
@@ -397,26 +890,34 @@ const CalendarPanel = ({
     return (
       <div
         ref={dropRef}
-        className={`h-[60px] border-t border-gray-200 relative ${isOver ? "bg-blue-50" : ""}`}
+        className={`h-[60px] border-t border-gray-200 dark:border-gray-700 relative ${isOver ? "bg-blue-50 dark:bg-blue-900/30" : ""}`}
       >
-        <div className="absolute left-0 top-[-10px] text-xs text-gray-500 w-[50px] text-right pr-2">
+        <div className="absolute left-0 top-[-10px] text-xs text-gray-500 dark:text-gray-400 w-[60px] text-right pr-2">
           {formatTimeForDisplay(time)}
         </div>
         {/* Add a visible horizontal line for each time slot */}
-        <div className="absolute left-0 right-0 border-t border-gray-200 top-0"></div>
+        <div className="absolute left-0 right-0 border-t border-gray-200 dark:border-gray-700 top-0"></div>
       </div>
     );
   };
 
   return (
     <Card
-      className={`w-[500px] bg-white shadow-lg ${isOver ? "ring-2 ring-primary" : ""}`}
+      className={`w-[500px] bg-card text-card-foreground shadow-lg ${isOver ? "ring-2 ring-primary" : ""}`}
     >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <CalendarIcon className="h-5 w-5 text-gray-500" />
             <CardTitle className="text-lg">Schedule</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-2 text-xs h-7 px-2"
+              onClick={toggleTimeFormat}
+            >
+              {timeFormat === "12h" ? "24h" : "12h"}
+            </Button>
             <Badge variant="secondary" className="ml-2">
               {filteredTasks.length} tasks
             </Badge>
@@ -563,7 +1064,10 @@ const CalendarPanel = ({
                           {day}
                         </span>
                         {tasksForDay.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge
+                            variant="secondary"
+                            className="text-xs text-blue-500 dark:text-blue-400 font-bold"
+                          >
                             {tasksForDay.length}
                           </Badge>
                         )}
@@ -592,29 +1096,34 @@ const CalendarPanel = ({
             className="h-[500px] pr-4 overflow-visible"
             scrollHideDelay={0}
           >
-            <div
-              ref={drop}
-              className="relative border-l border-gray-200 ml-[50px] bg-white"
-            >
+            <div className="relative border-l border-gray-200 dark:border-gray-700 ml-[60px] bg-white dark:bg-gray-900">
               <div
-                ref={calendarGridRef}
+                ref={(node) => {
+                  // Apply ref to the element
+                  calendarGridRef.current = node;
+                  drop(node);
+                }}
                 className="relative"
                 style={{ minHeight: `${TIME_SLOTS.length * 60}px` }}
               >
-                {/* Time slots */}
+                {/* Time slots - hourly intervals */}
                 {TIME_SLOTS.map((time) => (
                   <TimeSlot key={time} time={time} />
                 ))}
 
                 {/* Current time indicator - only show for today */}
-                {selectedDateISO === new Date().toISOString().split("T")[0] && (
+                {selectedDateISO ===
+                  (() => {
+                    const today = new Date();
+                    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                  })() && (
                   <div
-                    className="absolute left-0 right-0 border-t border-red-400 border-dashed z-20"
+                    className="absolute left-0 right-0 border-t-2 border-red-400 border-dashed z-20 current-time-indicator"
                     style={{
                       top: `${calculateTaskPosition(`${currentTime.getHours().toString().padStart(2, "0")}:${currentTime.getMinutes().toString().padStart(2, "0")}`)}px`,
                     }}
                   >
-                    <div className="absolute -top-2 -left-[50px] text-xs text-red-500 font-medium">
+                    <div className="absolute -top-2 -left-[60px] text-xs text-red-500 font-medium">
                       {formatTimeForDisplay(
                         `${currentTime.getHours().toString().padStart(2, "0")}:${currentTime.getMinutes().toString().padStart(2, "0")}`,
                       )}

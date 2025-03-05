@@ -33,18 +33,25 @@ const OnboardingDialog = ({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [tasks, setTasks] = useState([
-    { id: "1", title: "Warm-up task", completed: false },
-  ]);
+  const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
 
   const handleAddTask = () => {
     if (newTask.trim()) {
-      setTasks([
-        ...tasks,
-        { id: Date.now().toString(), title: newTask, completed: false },
-      ]);
+      const newTaskId = Date.now().toString();
+      setTasks([...tasks, { id: newTaskId, title: newTask, completed: false }]);
       setNewTask("");
+
+      // Dispatch event to ensure drag handlers are initialized with multiple attempts
+      // First immediate attempt
+      window.dispatchEvent(new Event("dragHandlersUpdate"));
+
+      // Multiple attempts with increasing delays to ensure handlers are attached
+      for (let delay of [50, 100, 200, 500, 1000]) {
+        setTimeout(() => {
+          window.dispatchEvent(new Event("dragHandlersUpdate"));
+        }, delay);
+      }
     }
   };
 
@@ -79,7 +86,7 @@ const OnboardingDialog = ({
       setTitle("");
       setDescription("");
       setDueDate("");
-      setTasks([{ id: "1", title: "Warm-up task", completed: false }]);
+      setTasks([]);
 
       onOpenChange(false);
     } catch (error) {

@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
+import { useTimeFormat } from "@/contexts/TimeFormatContext";
 import {
   Card,
   CardContent,
@@ -24,7 +25,7 @@ import {
   Calendar as CalendarIcon,
 } from "lucide-react";
 import EditAssignmentDialog from "./EditAssignmentDialog";
-import { useDrag } from "react-dnd";
+import { useDrag, useDrop } from "react-dnd";
 
 interface Task {
   id: string;
@@ -43,6 +44,7 @@ interface CalendarTask extends Task {
 
 interface AssignmentCardProps {
   id?: string;
+  index?: number;
   title?: string;
   description?: string;
   dueDate?: string;
@@ -57,10 +59,19 @@ interface AssignmentCardProps {
     dueDate: string;
     tasks: Task[];
   }) => void;
+  moveAssignment?: (dragIndex: number, hoverIndex: number) => void;
+  findAssignmentIndex?: (id: string) => number;
+}
+
+interface DragItem {
+  id: string;
+  index: number;
+  type: string;
 }
 
 const AssignmentCard = ({
   id = "",
+  index = 0,
   title = "Sample Assignment",
   description = "This is a sample assignment description",
   dueDate = "2024-04-30",
@@ -73,42 +84,88 @@ const AssignmentCard = ({
   onTaskToggle = () => {},
   onDelete = () => {},
   onUpdateAssignment = () => {},
+  moveAssignment = () => {},
+  findAssignmentIndex = () => -1,
 }: AssignmentCardProps) => {
+  const { formatTime } = useTimeFormat();
   const [isOpen, setIsOpen] = useState(true);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
 
-  const completedTasks = tasks.filter((task) => task.completed).length;
-  const progress = (completedTasks / tasks.length) * 100;
+  // Update local tasks when props change and ensure they're immediately draggable
+  React.useEffect(() => {
+    setLocalTasks(tasks);
+    // Force a re-render to ensure drag handlers are properly attached
+    if (cardRef.current) {
+      // Immediate attempt
+      window.dispatchEvent(new Event("dragHandlersUpdate"));
+
+      // Multiple attempts with increasing delays to ensure handlers are attached
+      for (let delay of [50, 100, 200, 500, 1000]) {
+        setTimeout(() => {
+          window.dispatchEvent(new Event("dragHandlersUpdate"));
+        }, delay);
+      }
+    }
+  }, [tasks]);
+
+  // Assignment cards are no longer draggable
+  const completedTasks = localTasks.filter((task) => task.completed).length;
+  const progress = (completedTasks / localTasks.length) * 100;
+
+  // Function to move a task from one position to another
+  const moveTask = (fromIndex: number, toIndex: number) => {
+    const updatedTasks = [...localTasks];
+    const [movedTask] = updatedTasks.splice(fromIndex, 1);
+    updatedTasks.splice(toIndex, 0, movedTask);
+
+    setLocalTasks(updatedTasks);
+
+    // Update the assignment with the new task order
+    onUpdateAssignment({
+      id,
+      title,
+      description,
+      dueDate,
+      tasks: updatedTasks,
+    });
+  };
 
   return (
-    <Card className="w-full bg-white shadow-lg">
+    <Card
+      ref={cardRef}
+      className="w-full bg-card text-card-foreground shadow-lg"
+    >
       <CardHeader>
         <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-xl font-bold">{title}</CardTitle>
-            <CardDescription className="mt-1">{description}</CardDescription>
+          <div className="flex items-center">
+            <div>
+              <CardTitle className="text-xl font-bold">{title}</CardTitle>
+              <CardDescription className="mt-1">{description}</CardDescription>
+            </div>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            onClick={onDelete}
-            className="text-gray-500 hover:text-red-500"
+            onClick={() => setShowEditDialog(true)}
+            className="text-gray-500 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400"
           >
-            <Trash2 className="h-5 w-5" />
+            <Edit className="h-5 w-5" />
           </Button>
         </div>
       </CardHeader>
 
       <CardContent>
         <div className="mb-4">
-          <div className="flex justify-between text-sm text-gray-600 mb-2">
+          <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
             <span>Progress</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
         </div>
 
-        <div className="text-sm text-gray-600 mb-4">
+        <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
           Due: {new Date(dueDate).toLocaleDateString()}
         </div>
 
@@ -116,10 +173,10 @@ const AssignmentCard = ({
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
-              className="flex w-full justify-between p-2 hover:bg-gray-100"
+              className="flex w-full justify-between p-2 hover:bg-muted/50"
             >
               <span>
-                Tasks ({completedTasks}/{tasks.length})
+                Tasks ({completedTasks}/{localTasks.length})
               </span>
               {isOpen ? (
                 <ChevronUp className="h-4 w-4" />
@@ -129,59 +186,125 @@ const AssignmentCard = ({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="space-y-2 mt-2">
-              {tasks.map((task) => {
+            <div className="space-y-2 mt-2 max-h-[200px] overflow-y-auto">
+              {localTasks.map((task, taskIndex) => {
                 // Safely use useDrag only if we're in a DndProvider context
                 let dragRef: any = null;
                 let isDragging = false;
 
+                // Wrap useDrag in a try-catch to handle cases where DndProvider context is missing
                 try {
-                  const [dragResult, drag] = useDrag(() => ({
-                    type: "task",
-                    item: {
-                      ...task,
-                      assignmentId: id,
-                      assignmentTitle: title,
-                      // Make sure these properties are included for newly added tasks
-                      id: task.id,
-                      title: task.title,
-                      completed: task.completed,
-                    },
-                    collect: (monitor) => ({
-                      isDragging: !!monitor.isDragging(),
+                  // For dragging to calendar
+                  const [dragResult, drag] = useDrag(
+                    () => ({
+                      type: "task",
+                      item: {
+                        ...task,
+                        assignmentId: id,
+                        assignmentTitle: title,
+                        // Make sure these properties are included for newly added tasks
+                        id: task.id,
+                        title: task.title,
+                        completed: task.completed,
+                        index: taskIndex, // Include the task index for proper ordering
+                      },
+                      canDrag: true, // Allow dragging for all tasks
+                      collect: (monitor) => ({
+                        isDragging: !!monitor.isDragging(),
+                      }),
                     }),
-                  }));
+                    // Dependencies that affect the drag behavior
+                    [
+                      task.id,
+                      task.title,
+                      task.completed,
+                      id,
+                      title,
+                      taskIndex, // Add taskIndex as a dependency
+                      calendarTasks,
+                    ],
+                  );
+
                   dragRef = drag;
                   isDragging = dragResult.isDragging;
                 } catch (error) {
-                  console.log("DnD not available in this context");
+                  // Silently handle the error when DndProvider context is missing
+                  console.log("DnD not available in this context", error);
+                  dragRef = null;
+                  isDragging = false;
                 }
 
                 return (
                   <div
                     key={task.id}
-                    ref={dragRef}
-                    className={`flex items-center space-x-2 p-2 rounded hover:bg-gray-50 ${isDragging ? "opacity-50" : ""}`}
-                    style={{ cursor: "grab" }}
-                  >
-                    <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <Checkbox
-                      id={task.id}
-                      checked={task.completed}
-                      onCheckedChange={() => onTaskToggle(task.id)}
-                    />
-                    <div className="flex items-center flex-grow">
-                      <label
-                        htmlFor={task.id}
-                        className={`text-sm ${task.completed ? "line-through text-gray-400" : ""}`}
-                      >
-                        {task.title}
-                      </label>
-                      {calendarTasks.some(
+                    className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50" : ""}`}
+                    style={{
+                      cursor: calendarTasks.some(
                         (calTask) => calTask.id === task.id,
-                      ) && (
-                        <CalendarIcon className="h-3 w-3 ml-2 text-blue-500" />
-                      )}
+                      )
+                        ? "default"
+                        : "grab",
+                    }}
+                  >
+                    <div className="flex items-center space-x-2 flex-grow">
+                      <Checkbox
+                        id={task.id}
+                        checked={task.completed}
+                        onCheckedChange={() => onTaskToggle(task.id)}
+                      />
+                      <div className="flex items-center flex-grow">
+                        {calendarTasks.some(
+                          (calTask) => calTask.id === task.id,
+                        ) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+
+                              // Find the calendar task
+                              const calTask = calendarTasks.find(
+                                (ct) => ct.id === task.id,
+                              );
+                              if (!calTask) {
+                                console.error(
+                                  "Calendar task not found for ID:",
+                                  task.id,
+                                );
+                                return;
+                              }
+
+                              // Show tooltip with date and time information
+                              const dateStr = calTask.date
+                                ? new Date(calTask.date).toLocaleDateString()
+                                : "";
+                              const timeStr = calTask.startTime
+                                ? formatTime(calTask.startTime)
+                                : "";
+                              alert(
+                                `Task scheduled for: ${dateStr} at ${timeStr}`,
+                              );
+                            }}
+                            className="mr-2 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900 rounded-full p-1"
+                            aria-label="View in calendar"
+                            title={`Scheduled: ${calendarTasks.find((calTask) => calTask.id === task.id)?.date ? new Date(calendarTasks.find((calTask) => calTask.id === task.id)?.date || "").toLocaleDateString() : ""} ${calendarTasks.find((calTask) => calTask.id === task.id)?.startTime ? `at ${formatTime(calendarTasks.find((calTask) => calTask.id === task.id)?.startTime || "")}` : ""}`}
+                          >
+                            <CalendarIcon className="h-3 w-3 text-blue-500" />
+                          </button>
+                        )}
+                        <label
+                          htmlFor={task.id}
+                          className={`text-sm ${task.completed ? "line-through text-gray-400 dark:text-gray-500" : "text-foreground"}`}
+                        >
+                          {task.title}
+                        </label>
+                      </div>
+                    </div>
+                    <div
+                      ref={dragRef}
+                      className="flex items-center self-stretch cursor-grab"
+                      title="Drag to calendar or reorder"
+                    >
+                      <GripVertical className="h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
                     </div>
                   </div>
                 );
@@ -192,15 +315,7 @@ const AssignmentCard = ({
       </CardContent>
 
       <CardFooter className="flex justify-end pt-0">
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-sm"
-          onClick={() => setShowEditDialog(true)}
-        >
-          <Edit className="h-4 w-4 mr-2" />
-          Edit Assignment
-        </Button>
+        {/* Footer content removed */}
       </CardFooter>
 
       <EditAssignmentDialog

@@ -5,6 +5,9 @@ import Login from "./components/auth/Login";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AssignmentProvider } from "./contexts/AssignmentContext";
 import { CalendarProvider } from "./contexts/CalendarContext";
+import { TimeFormatProvider } from "./contexts/TimeFormatContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import { UserProvider } from "./contexts/UserContext";
 import routes from "tempo-routes";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -50,11 +53,17 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <AssignmentProvider>
-        <CalendarProvider>
-          <AppRoutes />
-        </CalendarProvider>
-      </AssignmentProvider>
+      <UserProvider>
+        <ThemeProvider>
+          <AssignmentProvider>
+            <TimeFormatProvider>
+              <CalendarProvider>
+                <AppRoutes />
+              </CalendarProvider>
+            </TimeFormatProvider>
+          </AssignmentProvider>
+        </ThemeProvider>
+      </UserProvider>
     </AuthProvider>
   );
 }

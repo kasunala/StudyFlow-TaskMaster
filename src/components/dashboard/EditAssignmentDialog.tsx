@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, X, GripVertical } from "lucide-react";
+import { Calendar, X, GripVertical, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface Task {
@@ -49,11 +49,48 @@ const EditAssignmentDialog = ({
 
   const handleAddTask = () => {
     if (newTask.trim()) {
-      setTasks([
+      // Create a new task with a unique ID
+      const newTaskId = `task-${Date.now()}`;
+      const updatedTasks = [
         ...tasks,
-        { id: Date.now().toString(), title: newTask, completed: false },
-      ]);
+        { id: newTaskId, title: newTask, completed: false },
+      ];
+      setTasks(updatedTasks);
       setNewTask("");
+
+      // Immediately update the parent component to refresh the assignment card
+      if (title && dueDate) {
+        onSave({
+          id: assignment.id,
+          title,
+          description,
+          dueDate,
+          tasks: updatedTasks,
+        });
+
+        // Dispatch a custom event to notify that a new task was added
+        // This can be used to trigger any additional UI updates if needed
+        window.dispatchEvent(
+          new CustomEvent("task-added", {
+            detail: {
+              taskId: newTaskId,
+              assignmentId: assignment.id,
+              index: updatedTasks.length - 1,
+            },
+          }),
+        );
+
+        // Force re-initialization of drag handlers with multiple attempts
+        // First immediate attempt
+        window.dispatchEvent(new Event("dragHandlersUpdate"));
+
+        // Multiple attempts with increasing delays to ensure handlers are attached
+        for (let delay of [50, 100, 200, 500, 1000]) {
+          setTimeout(() => {
+            window.dispatchEvent(new Event("dragHandlersUpdate"));
+          }, delay);
+        }
+      }
     }
   };
 
@@ -197,7 +234,33 @@ const EditAssignmentDialog = ({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex justify-between">
+          <div className="flex-1 flex justify-start">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (
+                  confirm(
+                    "Are you sure you want to delete this assignment? This action cannot be undone.",
+                  )
+                ) {
+                  onOpenChange(false);
+                  onSave({
+                    id: assignment.id,
+                    title: "",
+                    description: "",
+                    dueDate: "",
+                    tasks: [],
+                    _delete: true,
+                  });
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </div>
           <Button
             type="submit"
             onClick={handleSubmit}

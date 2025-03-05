@@ -15,6 +15,8 @@ import {
   LogOut,
   Settings,
   User,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 interface DashboardHeaderProps {
@@ -24,11 +26,13 @@ interface DashboardHeaderProps {
   notificationCount?: number;
   showNotifications?: boolean;
   showCalendar?: boolean;
+  isDarkMode?: boolean;
   onUpgradeClick?: () => void;
   onLogout?: () => void;
   onSettingsClick?: () => void;
   onNotificationClick?: () => void;
   onCalendarClick?: () => void;
+  onThemeToggle?: () => void;
 }
 
 const DashboardHeader = ({
@@ -38,14 +42,16 @@ const DashboardHeader = ({
   notificationCount = 3,
   showNotifications = false,
   showCalendar = true,
+  isDarkMode = false,
   onUpgradeClick = () => {},
   onLogout = () => {},
   onSettingsClick = () => {},
   onNotificationClick = () => {},
   onCalendarClick = () => {},
+  onThemeToggle = () => {},
 }: DashboardHeaderProps) => {
   return (
-    <header className="w-full h-[72px] px-6 bg-white border-b border-gray-200 flex items-center justify-between">
+    <header className="w-full h-[72px] px-6 bg-background border-b border-border flex items-center justify-between">
       {/* Logo */}
       <div className="flex items-center">
         <h1 className="text-2xl font-bold text-primary">TaskMaster</h1>
@@ -63,6 +69,20 @@ const DashboardHeader = ({
             Upgrade Now
           </Button>
         )}
+
+        {/* Theme Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onThemeToggle}
+          title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {isDarkMode ? (
+            <Sun className="h-5 w-5" />
+          ) : (
+            <Moon className="h-5 w-5" />
+          )}
+        </Button>
 
         {/* Calendar Toggle */}
         <Button

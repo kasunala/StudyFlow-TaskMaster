@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardHeader from "./dashboard/DashboardHeader";
 import AssignmentGrid from "./dashboard/AssignmentGrid";
@@ -6,11 +6,14 @@ import NotificationPanel from "./dashboard/NotificationPanel";
 import CalendarPanel from "./dashboard/CalendarPanel";
 import OnboardingDialog from "./onboarding/OnboardingDialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUser } from "@/contexts/UserContext";
 import { useAssignments } from "@/contexts/AssignmentContext";
 import { useCalendar, CalendarTask } from "@/contexts/CalendarContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Assignment, Task } from "@/types/assignment";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { generateNotifications, Notification } from "@/utils/notificationUtils";
 import {
   Dialog,
   DialogContent,
@@ -23,9 +26,11 @@ interface HomeProps {
   userTier?: "free" | "paid";
 }
 
-const Home = ({ userTier = "free" }: HomeProps) => {
+const Home = ({ userTier: propUserTier }: HomeProps) => {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const { userTier, upgradeToPaid } = useUser();
   const {
     assignments,
     isFirstLogin,
@@ -47,6 +52,10 @@ const Home = ({ userTier = "free" }: HomeProps) => {
   const [showCalendar, setShowCalendar] = useState(true);
   const [showUpgradeDialog, setShowUpgradeDialog] = React.useState(false);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [readNotifications, setReadNotifications] = useState<Set<string>>(
+    new Set(),
+  );
 
   const userEmail = currentUser?.email || currentUser?.displayName || "User";
   const userImage =
@@ -73,13 +82,46 @@ const Home = ({ userTier = "free" }: HomeProps) => {
     setShowOnboarding(true);
   };
 
+  // For debugging - log when assignments change
+  React.useEffect(() => {
+    console.log("Home component - assignments updated:", assignments);
+  }, [assignments]);
+
   // For debugging
   useEffect(() => {
     console.log("Current assignments:", assignments);
   }, [assignments]);
 
+  // Generate notifications from calendar tasks
+  useEffect(() => {
+    const newNotifications = generateNotifications(calendarTasks, assignments);
+
+    // Preserve read status for existing notifications
+    const updatedNotifications = newNotifications.map((notification) => ({
+      ...notification,
+      isRead: readNotifications.has(notification.id),
+    }));
+
+    setNotifications(updatedNotifications);
+
+    // Update notification count in header
+    const unreadCount = updatedNotifications.filter((n) => !n.isRead).length;
+    if (unreadCount > 0 && !showNotifications) {
+      // Optional: Flash the notification icon or show a toast
+    }
+  }, [calendarTasks, assignments, readNotifications]);
+
   const handleUpgradeClick = () => {
     setShowUpgradeDialog(true);
+  };
+
+  const handleConfirmUpgrade = async () => {
+    try {
+      await upgradeToPaid();
+      setShowUpgradeDialog(false);
+    } catch (error) {
+      console.error("Error upgrading account:", error);
+    }
   };
 
   const handleLogout = async () => {
@@ -95,6 +137,16 @@ const Home = ({ userTier = "free" }: HomeProps) => {
     removeCalendarTask(taskId);
   };
 
+  const handleToggleTask = (assignmentId: string, taskId: string) => {
+    toggleTask(assignmentId, taskId);
+
+    // Find if this task exists in calendar tasks and update it there too
+    const calendarTask = calendarTasks.find((task) => task.id === taskId);
+    if (calendarTask) {
+      toggleCalendarTask(taskId);
+    }
+  };
+
   const handleToggleCalendarTask = (taskId: string) => {
     toggleCalendarTask(taskId);
 
@@ -104,6 +156,58 @@ const Home = ({ userTier = "free" }: HomeProps) => {
       toggleTask(calendarTask.assignmentId, taskId);
     }
   };
+
+  const handleDeleteAssignment = (id: string) => {
+    deleteAssignment(id);
+  };
+
+  const handleUpdateAssignment = (assignment: Assignment) => {
+    // Check if this is a delete operation
+    if (assignment._delete) {
+      deleteAssignment(assignment.id);
+      return;
+    }
+
+    // Otherwise update normally
+    updateAssignment(assignment);
+  };
+
+  // Listen for show-calendar events
+  useEffect(() => {
+    const handleShowCalendar = () => {
+      console.log("Home component received show-calendar event");
+      setShowCalendar(true);
+      setShowNotifications(false);
+    };
+
+    window.addEventListener("show-calendar", handleShowCalendar);
+
+    return () => {
+      window.removeEventListener("show-calendar", handleShowCalendar);
+    };
+  }, []);
+
+  // Listen for focus-calendar-task events to show the calendar panel
+  useEffect(() => {
+    const handleFocusTask = (event: any) => {
+      console.log(
+        "Home component received focus-calendar-task event",
+        event.detail,
+      );
+      // Make sure calendar is visible when a task is focused
+      if (!showCalendar) {
+        console.log("Showing calendar panel");
+        setShowCalendar(true);
+        setShowNotifications(false);
+      }
+    };
+
+    window.addEventListener("focus-calendar-task", handleFocusTask);
+
+    return () => {
+      window.removeEventListener("focus-calendar-task", handleFocusTask);
+    };
+  }, [showCalendar]);
 
   const handleUpdateTaskTime = (
     taskId: string,
@@ -121,6 +225,48 @@ const Home = ({ userTier = "free" }: HomeProps) => {
     }
   };
 
+  const handleMarkNotificationAsRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === id
+          ? { ...notification, isRead: true }
+          : notification,
+      ),
+    );
+    setReadNotifications((prev) => new Set(prev).add(id));
+  };
+
+  const handleDismissNotification = (id: string) => {
+    setNotifications((prev) =>
+      prev.filter((notification) => notification.id !== id),
+    );
+    setReadNotifications((prev) => new Set(prev).add(id));
+  };
+
+  const handleClearAllNotifications = () => {
+    // Mark all as read but don't remove them
+    const allIds = notifications.map((n) => n.id);
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setReadNotifications((prev) => {
+      const newSet = new Set(prev);
+      allIds.forEach((id) => newSet.add(id));
+      return newSet;
+    });
+  };
+
+  const handleViewTask = (taskId: string, assignmentId: string) => {
+    // Focus the task in the calendar
+    window.dispatchEvent(
+      new CustomEvent("focus-calendar-task", {
+        detail: { taskId },
+      }),
+    );
+
+    // Show calendar panel
+    setShowCalendar(true);
+    setShowNotifications(false);
+  };
+
   const toggleCalendar = () => {
     setShowCalendar(!showCalendar);
     if (!showCalendar) {
@@ -128,20 +274,25 @@ const Home = ({ userTier = "free" }: HomeProps) => {
     }
   };
 
-  return (
+  // Make sure we have the DndProvider at the top level
+  let content = (
     <DndProvider backend={HTML5Backend}>
-      <div className="min-h-screen bg-gray-100">
+      <div
+        className={`min-h-screen bg-background ${theme === "dark" ? "dark" : ""}`}
+      >
         <DashboardHeader
           userEmail={userEmail}
           userImage={userImage}
           isFreeTier={userTier === "free"}
-          notificationCount={3}
+          notificationCount={notifications.filter((n) => !n.isRead).length}
           onUpgradeClick={handleUpgradeClick}
           onLogout={handleLogout}
           onNotificationClick={toggleNotifications}
           onCalendarClick={toggleCalendar}
           showCalendar={showCalendar}
           showNotifications={showNotifications}
+          isDarkMode={theme === "dark"}
+          onThemeToggle={toggleTheme}
         />
 
         <main className="container mx-auto px-6 py-8">
@@ -152,9 +303,9 @@ const Home = ({ userTier = "free" }: HomeProps) => {
                 assignments={assignments}
                 calendarTasks={calendarTasks}
                 onCreateAssignment={handleCreateAssignment}
-                onDeleteAssignment={deleteAssignment}
-                onTaskToggle={toggleTask}
-                onUpdateAssignment={updateAssignment}
+                onDeleteAssignment={handleDeleteAssignment}
+                onTaskToggle={handleToggleTask}
+                onUpdateAssignment={handleUpdateAssignment}
               />
             </div>
 
@@ -172,8 +323,11 @@ const Home = ({ userTier = "free" }: HomeProps) => {
 
               {showNotifications && (
                 <NotificationPanel
-                  onMarkAsRead={(id) => console.log("Mark as read", id)}
-                  onDismiss={(id) => console.log("Dismiss notification", id)}
+                  notifications={notifications}
+                  onMarkAsRead={handleMarkNotificationAsRead}
+                  onDismiss={handleDismissNotification}
+                  onViewTask={handleViewTask}
+                  onClearAll={handleClearAllNotifications}
                 />
               )}
             </div>
@@ -221,7 +375,7 @@ const Home = ({ userTier = "free" }: HomeProps) => {
               </div>
               <button
                 className="w-full bg-primary text-white rounded-lg py-2 px-4 hover:bg-primary/90"
-                onClick={() => setShowUpgradeDialog(false)}
+                onClick={handleConfirmUpgrade}
               >
                 Upgrade Now - $39
               </button>
@@ -231,6 +385,8 @@ const Home = ({ userTier = "free" }: HomeProps) => {
       </div>
     </DndProvider>
   );
+
+  return content;
 };
 
 export default Home;

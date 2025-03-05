@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { useUser } from "./UserContext";
 import { Task, Assignment } from "@/types/assignment";
 import {
   getFirestore,
@@ -50,6 +51,7 @@ export const useAssignments = () => {
 
 const AssignmentProvider = ({ children }: { children: React.ReactNode }) => {
   const { currentUser } = useAuth();
+  const { userTier } = useUser();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
 
@@ -96,6 +98,12 @@ const AssignmentProvider = ({ children }: { children: React.ReactNode }) => {
   const createAssignment = async (assignment: Omit<Assignment, "id">) => {
     if (!currentUser) {
       console.error("No user logged in");
+      return;
+    }
+
+    // Check if user has reached the free tier limit
+    if (userTier === "free" && assignments.length >= 3) {
+      console.error("Free tier limit reached");
       return;
     }
 
