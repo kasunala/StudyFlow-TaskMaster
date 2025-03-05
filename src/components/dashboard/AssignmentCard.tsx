@@ -15,7 +15,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronUp, Trash2, Edit } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Edit,
+  GripVertical,
+  Calendar as CalendarIcon,
+} from "lucide-react";
 import EditAssignmentDialog from "./EditAssignmentDialog";
 import { useDrag } from "react-dnd";
 
@@ -25,12 +32,22 @@ interface Task {
   completed: boolean;
 }
 
+interface CalendarTask extends Task {
+  assignmentId: string;
+  assignmentTitle: string;
+  startTime?: string;
+  endTime?: string;
+  duration?: number;
+  date?: string;
+}
+
 interface AssignmentCardProps {
   id?: string;
   title?: string;
   description?: string;
   dueDate?: string;
   tasks?: Task[];
+  calendarTasks?: CalendarTask[];
   onTaskToggle?: (taskId: string) => void;
   onDelete?: () => void;
   onUpdateAssignment?: (assignment: {
@@ -52,6 +69,7 @@ const AssignmentCard = ({
     { id: "2", title: "Research materials", completed: true },
     { id: "3", title: "Write first draft", completed: false },
   ],
+  calendarTasks = [],
   onTaskToggle = () => {},
   onDelete = () => {},
   onUpdateAssignment = () => {},
@@ -120,7 +138,15 @@ const AssignmentCard = ({
                 try {
                   const [dragResult, drag] = useDrag(() => ({
                     type: "task",
-                    item: { ...task, assignmentId: id, assignmentTitle: title },
+                    item: {
+                      ...task,
+                      assignmentId: id,
+                      assignmentTitle: title,
+                      // Make sure these properties are included for newly added tasks
+                      id: task.id,
+                      title: task.title,
+                      completed: task.completed,
+                    },
                     collect: (monitor) => ({
                       isDragging: !!monitor.isDragging(),
                     }),
@@ -138,17 +164,25 @@ const AssignmentCard = ({
                     className={`flex items-center space-x-2 p-2 rounded hover:bg-gray-50 ${isDragging ? "opacity-50" : ""}`}
                     style={{ cursor: "grab" }}
                   >
+                    <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
                     <Checkbox
                       id={task.id}
                       checked={task.completed}
                       onCheckedChange={() => onTaskToggle(task.id)}
                     />
-                    <label
-                      htmlFor={task.id}
-                      className={`flex-grow text-sm ${task.completed ? "line-through text-gray-400" : ""}`}
-                    >
-                      {task.title}
-                    </label>
+                    <div className="flex items-center flex-grow">
+                      <label
+                        htmlFor={task.id}
+                        className={`text-sm ${task.completed ? "line-through text-gray-400" : ""}`}
+                      >
+                        {task.title}
+                      </label>
+                      {calendarTasks.some(
+                        (calTask) => calTask.id === task.id,
+                      ) && (
+                        <CalendarIcon className="h-3 w-3 ml-2 text-blue-500" />
+                      )}
+                    </div>
                   </div>
                 );
               })}

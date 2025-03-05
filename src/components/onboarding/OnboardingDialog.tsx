@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "lucide-react";
+import { Calendar, GripVertical } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface OnboardingDialogProps {
@@ -147,7 +147,8 @@ const OnboardingDialog = ({
                   key={task.id}
                   className="flex items-center justify-between p-2 border rounded-md"
                 >
-                  <div className="flex items-center space-x-2">
+                  <GripVertical className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
+                  <div className="flex items-center space-x-2 flex-1">
                     <Checkbox id={`task-${task.id}`} />
                     <Label
                       htmlFor={`task-${task.id}`}

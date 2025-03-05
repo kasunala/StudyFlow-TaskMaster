@@ -135,6 +135,18 @@ const CalendarPanel = ({
   // Reference to the calendar grid for position calculations
   const calendarGridRef = useRef<HTMLDivElement>(null);
 
+  // State for current time indicator
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
+
   // Format selected date as ISO string (YYYY-MM-DD)
   const selectedDateISO = selectedDate.toISOString().split("T")[0];
 
@@ -223,13 +235,31 @@ const CalendarPanel = ({
   const CalendarTaskItem = ({ task }: { task: CalendarTask }) => {
     const [{ isDragging }, drag, preview] = useDrag(() => ({
       type: "calendar-task",
-      item: { id: task.id },
+      item: {
+        id: task.id,
+        assignmentId: task.assignmentId,
+        assignmentTitle: task.assignmentTitle,
+        title: task.title,
+        completed: task.completed,
+        startTime: task.startTime,
+        endTime: task.endTime,
+        duration: task.duration,
+        date: task.date,
+      },
+      end: (item, monitor) => {
+        // Reset any UI state when drag ends
+        if (!monitor.didDrop()) {
+          // If not dropped on a valid target
+          console.log("Drag ended without valid drop");
+        }
+      },
       collect: (monitor) => ({
         isDragging: !!monitor.isDragging(),
       }),
     }));
 
     const [isEditing, setIsEditing] = useState(false);
+    const [sliderValue, setSliderValue] = useState(task.duration || 30);
 
     const top = calculateTaskPosition(task.startTime || "08:00");
     const height = calculateTaskHeight(task.duration || 30);
@@ -244,7 +274,10 @@ const CalendarPanel = ({
           zIndex: isEditing ? 10 : 1,
         }}
       >
-        <div className="flex items-start h-full">
+        {isEditing && (
+          <div className="absolute inset-0 bg-black bg-opacity-20 rounded-md z-0"></div>
+        )}
+        <div className="flex items-start h-full relative z-10">
           <div ref={drag} className="cursor-move mr-1 mt-1 flex-shrink-0">
             <GripVertical className="h-3 w-3 text-gray-500" />
           </div>
@@ -272,17 +305,18 @@ const CalendarPanel = ({
             </p>
 
             {isEditing && (
-              <div className="mt-1 space-y-2">
+              <div className="mt-1 space-y-2 bg-white bg-opacity-90 p-1 rounded">
                 <div className="flex items-center space-x-1">
                   <span className="text-xs">Duration:</span>
                   <Slider
-                    value={[task.duration || 30]}
+                    value={[sliderValue]}
                     min={15}
                     max={120}
                     step={15}
                     className="flex-1"
                     onValueChange={(value) => {
                       const duration = value[0];
+                      setSliderValue(duration);
                       onUpdateTaskTime(
                         task.id,
                         task.startTime || "08:00",
@@ -291,9 +325,7 @@ const CalendarPanel = ({
                       );
                     }}
                   />
-                  <span className="text-xs w-8 text-right">
-                    {task.duration}m
-                  </span>
+                  <span className="text-xs w-8 text-right">{sliderValue}m</span>
                 </div>
 
                 <div className="flex justify-between">
@@ -334,22 +366,27 @@ const CalendarPanel = ({
   // Time slot drop zones
   const TimeSlot = ({ time }: { time: string }) => {
     const [{ isOver }, dropRef] = useDrop(() => ({
-      accept: "task",
-      drop: (
-        item: Task & { assignmentId: string; assignmentTitle: string },
-      ) => {
+      accept: ["task", "calendar-task"],
+      drop: (item: any) => {
         // Calculate end time (default 30 min duration)
-        const endTime = calculateEndTime(time, 30);
+        const duration = item.duration || 30;
+        const endTime = calculateEndTime(time, duration);
 
-        onAddTask({
-          ...item,
-          assignmentId: item.assignmentId,
-          assignmentTitle: item.assignmentTitle,
-          startTime: time,
-          endTime: endTime,
-          duration: 30,
-          date: selectedDateISO,
-        });
+        // If it's a calendar task being moved, use its existing properties
+        if (item.startTime) {
+          onUpdateTaskTime(item.id, time, endTime, duration);
+        } else {
+          // It's a new task being added from assignments
+          onAddTask({
+            ...item,
+            assignmentId: item.assignmentId,
+            assignmentTitle: item.assignmentTitle,
+            startTime: time,
+            endTime: endTime,
+            duration: duration,
+            date: selectedDateISO,
+          });
+        }
         return { name: "TimeSlot" };
       },
       collect: (monitor) => ({
@@ -568,6 +605,23 @@ const CalendarPanel = ({
                 {TIME_SLOTS.map((time) => (
                   <TimeSlot key={time} time={time} />
                 ))}
+
+                {/* Current time indicator - only show for today */}
+                {selectedDateISO === new Date().toISOString().split("T")[0] && (
+                  <div
+                    className="absolute left-0 right-0 border-t border-red-400 border-dashed z-20"
+                    style={{
+                      top: `${calculateTaskPosition(`${currentTime.getHours().toString().padStart(2, "0")}:${currentTime.getMinutes().toString().padStart(2, "0")}`)}px`,
+                    }}
+                  >
+                    <div className="absolute -top-2 -left-[50px] text-xs text-red-500 font-medium">
+                      {formatTimeForDisplay(
+                        `${currentTime.getHours().toString().padStart(2, "0")}:${currentTime.getMinutes().toString().padStart(2, "0")}`,
+                      )}
+                    </div>
+                    <div className="absolute -top-2 left-1 h-4 w-4 rounded-full bg-red-400"></div>
+                  </div>
+                )}
 
                 {/* Tasks positioned absolutely */}
                 {filteredTasks.map((task) => (

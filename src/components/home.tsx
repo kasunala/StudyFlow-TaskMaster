@@ -150,6 +150,7 @@ const Home = ({ userTier = "free" }: HomeProps) => {
             <div className="flex-1">
               <AssignmentGrid
                 assignments={assignments}
+                calendarTasks={calendarTasks}
                 onCreateAssignment={handleCreateAssignment}
                 onDeleteAssignment={deleteAssignment}
                 onTaskToggle={toggleTask}

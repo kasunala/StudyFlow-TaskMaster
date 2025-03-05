@@ -17,8 +17,21 @@ interface Assignment {
   tasks: Task[];
 }
 
+interface CalendarTask {
+  id: string;
+  title: string;
+  completed: boolean;
+  assignmentId: string;
+  assignmentTitle: string;
+  startTime?: string;
+  endTime?: string;
+  duration?: number;
+  date?: string;
+}
+
 interface AssignmentGridProps {
   assignments?: Assignment[];
+  calendarTasks?: CalendarTask[];
   onCreateAssignment?: () => void;
   onDeleteAssignment?: (id: string) => void;
   onTaskToggle?: (assignmentId: string, taskId: string) => void;
@@ -27,6 +40,7 @@ interface AssignmentGridProps {
 
 const AssignmentGrid = ({
   assignments = [],
+  calendarTasks = [],
   onCreateAssignment = () => {},
   onDeleteAssignment = () => {},
   onTaskToggle = () => {},
@@ -58,6 +72,9 @@ const AssignmentGrid = ({
               description={assignment.description}
               dueDate={assignment.dueDate}
               tasks={assignment.tasks}
+              calendarTasks={calendarTasks.filter(
+                (task) => task.assignmentId === assignment.id,
+              )}
               onDelete={() => onDeleteAssignment(assignment.id)}
               onTaskToggle={(taskId) => onTaskToggle(assignment.id, taskId)}
               onUpdateAssignment={(updatedAssignment) =>
