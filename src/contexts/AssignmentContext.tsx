@@ -12,10 +12,25 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
-import { auth } from "@/lib/firebase";
+import { auth, app } from "@/lib/firebase";
 
-// Use the existing Firebase instance
-const db = getFirestore();
+// Initialize Firestore only if Firebase is available
+let db: any;
+try {
+  db = getFirestore(app);
+} catch (error) {
+  console.error("Firestore initialization error:", error);
+  // Create a mock db for development/testing
+  db = {
+    collection: () => ({}),
+    doc: () => ({}),
+    setDoc: async () => {},
+    deleteDoc: async () => {},
+    query: () => ({}),
+    getDocs: async () => ({ forEach: () => {} }),
+    getDoc: async () => ({ exists: () => false, data: () => ({}) }),
+  };
+}
 
 interface AssignmentContextType {
   assignments: Assignment[];

@@ -4,6 +4,7 @@ import Home from "./components/home";
 import Login from "./components/auth/Login";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AssignmentProvider } from "./contexts/AssignmentContext";
+import { CalendarProvider } from "./contexts/CalendarContext";
 import routes from "tempo-routes";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -50,7 +51,9 @@ function App() {
   return (
     <AuthProvider>
       <AssignmentProvider>
-        <AppRoutes />
+        <CalendarProvider>
+          <AppRoutes />
+        </CalendarProvider>
       </AssignmentProvider>
     </AuthProvider>
   );

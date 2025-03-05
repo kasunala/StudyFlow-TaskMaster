@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronDown, ChevronUp, Trash2, Edit } from "lucide-react";
 import EditAssignmentDialog from "./EditAssignmentDialog";
+import { useDrag } from "react-dnd";
 
 interface Task {
   id: string;
@@ -111,24 +112,46 @@ const AssignmentCard = ({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="space-y-2 mt-2">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center space-x-2 p-2 rounded hover:bg-gray-50"
-                >
-                  <Checkbox
-                    id={task.id}
-                    checked={task.completed}
-                    onCheckedChange={() => onTaskToggle(task.id)}
-                  />
-                  <label
-                    htmlFor={task.id}
-                    className={`flex-grow text-sm ${task.completed ? "line-through text-gray-400" : ""}`}
+              {tasks.map((task) => {
+                // Safely use useDrag only if we're in a DndProvider context
+                let dragRef: any = null;
+                let isDragging = false;
+
+                try {
+                  const [dragResult, drag] = useDrag(() => ({
+                    type: "task",
+                    item: { ...task, assignmentId: id, assignmentTitle: title },
+                    collect: (monitor) => ({
+                      isDragging: !!monitor.isDragging(),
+                    }),
+                  }));
+                  dragRef = drag;
+                  isDragging = dragResult.isDragging;
+                } catch (error) {
+                  console.log("DnD not available in this context");
+                }
+
+                return (
+                  <div
+                    key={task.id}
+                    ref={dragRef}
+                    className={`flex items-center space-x-2 p-2 rounded hover:bg-gray-50 ${isDragging ? "opacity-50" : ""}`}
+                    style={{ cursor: "grab" }}
                   >
-                    {task.title}
-                  </label>
-                </div>
-              ))}
+                    <Checkbox
+                      id={task.id}
+                      checked={task.completed}
+                      onCheckedChange={() => onTaskToggle(task.id)}
+                    />
+                    <label
+                      htmlFor={task.id}
+                      className={`flex-grow text-sm ${task.completed ? "line-through text-gray-400" : ""}`}
+                    >
+                      {task.title}
+                    </label>
+                  </div>
+                );
+              })}
             </div>
           </CollapsibleContent>
         </Collapsible>

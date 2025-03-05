@@ -7,16 +7,28 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Bell, ChevronDown, Crown, LogOut, Settings, User } from "lucide-react";
+import {
+  Bell,
+  Calendar,
+  ChevronDown,
+  Crown,
+  LogOut,
+  Settings,
+  User,
+} from "lucide-react";
 
 interface DashboardHeaderProps {
   userEmail?: string;
   userImage?: string;
   isFreeTier?: boolean;
   notificationCount?: number;
+  showNotifications?: boolean;
+  showCalendar?: boolean;
   onUpgradeClick?: () => void;
   onLogout?: () => void;
   onSettingsClick?: () => void;
+  onNotificationClick?: () => void;
+  onCalendarClick?: () => void;
 }
 
 const DashboardHeader = ({
@@ -24,9 +36,13 @@ const DashboardHeader = ({
   userImage = "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
   isFreeTier = true,
   notificationCount = 3,
+  showNotifications = false,
+  showCalendar = true,
   onUpgradeClick = () => {},
   onLogout = () => {},
   onSettingsClick = () => {},
+  onNotificationClick = () => {},
+  onCalendarClick = () => {},
 }: DashboardHeaderProps) => {
   return (
     <header className="w-full h-[72px] px-6 bg-white border-b border-gray-200 flex items-center justify-between">
@@ -48,8 +64,21 @@ const DashboardHeader = ({
           </Button>
         )}
 
+        {/* Calendar Toggle */}
+        <Button
+          variant={showCalendar ? "default" : "ghost"}
+          className="relative"
+          onClick={onCalendarClick}
+        >
+          <Calendar className="h-5 w-5" />
+        </Button>
+
         {/* Notifications */}
-        <Button variant="ghost" className="relative">
+        <Button
+          variant={showNotifications ? "default" : "ghost"}
+          className="relative"
+          onClick={onNotificationClick}
+        >
           <Bell className="h-5 w-5" />
           {notificationCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
