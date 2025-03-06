@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useDrop, useDrag } from "react-dnd";
+import BlockTimeDialog from "./BlockTimeDialog";
 import {
   Select,
   SelectContent,
@@ -32,11 +33,7 @@ interface Task {
   id: string;
   title: string;
   completed: boolean;
-  assignmentId?: string;
-  assignmentTitle?: string;
-  startTime?: string;
-  endTime?: string;
-  duration?: number;
+  duration?: number; // Duration in minutes
 }
 
 interface CalendarTask extends Task {
@@ -46,6 +43,7 @@ interface CalendarTask extends Task {
   endTime?: string;
   duration?: number;
   date?: string; // ISO date string format YYYY-MM-DD
+  isBlockedTime?: boolean;
 }
 
 interface CalendarPanelProps {
@@ -59,6 +57,10 @@ interface CalendarPanelProps {
     endTime?: string,
     duration?: number,
   ) => void;
+  selectedDate?: Date;
+  isEmbedded?: boolean;
+  hideScheduleHeader?: boolean;
+  hideViewMonthButton?: boolean;
 }
 
 // Generate time slots for the calendar view (hourly increments)
@@ -131,7 +133,12 @@ const CalendarPanel = ({
   onRemoveTask = () => {},
   onToggleTask = () => {},
   onUpdateTaskTime = () => {},
+  selectedDate,
+  isEmbedded = false,
+  hideScheduleHeader = false,
+  hideViewMonthButton = false,
 }: CalendarPanelProps) => {
+  const [showBlockTimeDialog, setShowBlockTimeDialog] = useState(false);
   // Get time format functions from context
   const { timeFormat, toggleTimeFormat, formatTime } = useTimeFormat();
 
@@ -141,7 +148,9 @@ const CalendarPanel = ({
     return formatTime(time);
   };
   const [hoveredTimeSlot, setHoveredTimeSlot] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [internalSelectedDate, setInternalSelectedDate] = useState(new Date());
+  // Use provided selectedDate if available, otherwise use internal state
+  const effectiveSelectedDate = selectedDate || internalSelectedDate;
   const [visibleTimeSlots, setVisibleTimeSlots] = useState(TIME_SLOTS);
   const [showMonthView, setShowMonthView] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -177,6 +186,39 @@ const CalendarPanel = ({
     return () => clearInterval(timer);
   }, []);
 
+  // Format selected date as ISO string (YYYY-MM-DD)
+  // Ensure we're working with a proper Date object and using local timezone
+  const selectedDateISO =
+    effectiveSelectedDate instanceof Date
+      ? `${effectiveSelectedDate.getFullYear()}-${String(effectiveSelectedDate.getMonth() + 1).padStart(2, "0")}-${String(effectiveSelectedDate.getDate()).padStart(2, "0")}`
+      : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+
+  // Scroll to current time indicator when calendar view is first shown
+  useEffect(() => {
+    if (
+      !showMonthView &&
+      selectedDateISO ===
+        (() => {
+          const today = new Date();
+          return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        })()
+    ) {
+      // Short delay to ensure the calendar has rendered
+      setTimeout(() => {
+        const currentTimeIndicator = document.getElementById(
+          "current-time-indicator",
+        );
+        if (currentTimeIndicator) {
+          currentTimeIndicator.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+          console.log("Calendar panel scrolled to current time indicator");
+        }
+      }, 300);
+    }
+  }, [showMonthView, selectedDateISO]);
+
   // Listen for focus-calendar-task events
   useEffect(() => {
     const handleFocusTask = (event: any) => {
@@ -197,7 +239,7 @@ const CalendarPanel = ({
           // Update the month and year state variables to match the task date
           setSelectedMonth(taskDate.getMonth());
           setSelectedYear(taskDate.getFullYear());
-          setSelectedDate(taskDate);
+          setInternalSelectedDate(taskDate);
         }
 
         // Make sure we're in day view
@@ -280,13 +322,6 @@ const CalendarPanel = ({
       window.removeEventListener("focus-calendar-task", handleFocusTask);
     };
   }, [calendarTasks]);
-
-  // Format selected date as ISO string (YYYY-MM-DD)
-  // Ensure we're working with a proper Date object and using local timezone
-  const selectedDateISO =
-    selectedDate instanceof Date
-      ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
-      : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
 
   // Filter tasks for the selected date
   const filteredTasks = calendarTasks.filter((task) => {
@@ -390,14 +425,27 @@ const CalendarPanel = ({
 
       const timeSlot = `${hour.toString().padStart(2, "0")}:${minuteRounded.toString().padStart(2, "0")}`;
       setHoveredTimeSlot(timeSlot);
+
+      // Add visual feedback for the time slot being hovered over
+      const allTimeSlots = document.querySelectorAll(".time-slot");
+      allTimeSlots.forEach((slot) => {
+        slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30");
+      });
+
+      const targetHour = Math.floor(hoursSince8AM);
+      const targetSlot = document.querySelector(`.time-slot-${targetHour}`);
+      if (targetSlot) {
+        targetSlot.classList.add("bg-blue-50", "dark:bg-blue-900/30");
+      }
     },
+
     drop: (
       item: Task & { assignmentId: string; assignmentTitle: string },
       monitor,
     ) => {
       if (!calendarGridRef.current || !hoveredTimeSlot) return;
 
-      const duration = 30; // Default duration
+      const duration = item.duration || 30; // Use task's duration or default to 30 minutes
 
       // Check if the selected time slot would cause an overlap
       let finalTimeSlot = hoveredTimeSlot;
@@ -428,7 +476,7 @@ const CalendarPanel = ({
   }));
 
   // Format the selected date for display
-  const formattedDate = selectedDate.toLocaleDateString("en-US", {
+  const formattedDate = effectiveSelectedDate.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -437,16 +485,16 @@ const CalendarPanel = ({
 
   // Navigate to previous day
   const goToPreviousDay = () => {
-    const prevDay = new Date(selectedDate);
+    const prevDay = new Date(effectiveSelectedDate);
     prevDay.setDate(prevDay.getDate() - 1);
-    setSelectedDate(prevDay);
+    setInternalSelectedDate(prevDay);
   };
 
   // Navigate to next day
   const goToNextDay = () => {
-    const nextDay = new Date(selectedDate);
+    const nextDay = new Date(effectiveSelectedDate);
     nextDay.setDate(nextDay.getDate() + 1);
-    setSelectedDate(nextDay);
+    setInternalSelectedDate(nextDay);
   };
 
   // Create a task component that can be dragged within the calendar
@@ -487,11 +535,13 @@ const CalendarPanel = ({
       <div
         id={`calendar-task-${task.id}`}
         ref={preview}
-        className={`absolute left-[70px] right-4 rounded-md px-2 py-1 ${task.completed ? "bg-gray-100 dark:bg-gray-700" : "bg-blue-100 dark:bg-blue-900"} ${isDragging ? "opacity-50" : ""} border border-gray-300 dark:border-gray-600 shadow-sm transition-all duration-300`}
+        className={`absolute left-[70px] rounded-md px-2 py-1 ${task.completed ? "bg-gray-100 dark:bg-gray-700" : task.isBlockedTime ? "bg-orange-100 dark:bg-orange-900" : "bg-blue-100 dark:bg-blue-900"} ${isDragging ? "opacity-50" : ""} border border-gray-300 dark:border-gray-600 shadow-sm transition-all duration-300`}
         style={{
           top: `${top}px`,
           height: `${height}px`,
           zIndex: isEditing ? 10 : 1,
+          width: "calc(100% - 90px)",
+          minWidth: "300px",
         }}
         title={`${task.assignmentTitle}: ${task.title} (${formatTimeForDisplay(task.startTime || "")} - ${formatTimeForDisplay(task.endTime || "")})`}
       >
@@ -585,7 +635,7 @@ const CalendarPanel = ({
                       <Slider
                         value={[sliderValue]}
                         min={15}
-                        max={120}
+                        max={240}
                         step={15}
                         className="flex-1"
                         onValueChange={(value) => {
@@ -849,11 +899,23 @@ const CalendarPanel = ({
   };
 
   // Time slot drop zones
-  const TimeSlot = ({ time }: { time: string }) => {
+  const TimeSlot = ({ time, index }: { time: string; index: number }) => {
     const [{ isOver }, dropRef] = useDrop(() => ({
       accept: ["task", "calendar-task"],
+      hover: () => {
+        // Add visual feedback for the time slot being hovered over
+        const allTimeSlots = document.querySelectorAll(".time-slot");
+        allTimeSlots.forEach((slot) => {
+          slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30");
+        });
+
+        const targetSlot = document.querySelector(`.time-slot-${index}`);
+        if (targetSlot) {
+          targetSlot.classList.add("bg-blue-50", "dark:bg-blue-900/30");
+        }
+      },
       drop: (item: any) => {
-        // Calculate end time (default 30 min duration)
+        // Use the task's duration or default to 30 minutes
         const duration = item.duration || 30;
 
         // Check if the selected time slot would cause an overlap (excluding the task being moved)
@@ -880,6 +942,13 @@ const CalendarPanel = ({
             date: selectedDateISO,
           });
         }
+
+        // Remove hover effect after drop
+        const allTimeSlots = document.querySelectorAll(".time-slot");
+        allTimeSlots.forEach((slot) => {
+          slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30");
+        });
+
         return { name: "TimeSlot" };
       },
       collect: (monitor) => ({
@@ -890,7 +959,7 @@ const CalendarPanel = ({
     return (
       <div
         ref={dropRef}
-        className={`h-[60px] border-t border-gray-200 dark:border-gray-700 relative ${isOver ? "bg-blue-50 dark:bg-blue-900/30" : ""}`}
+        className={`time-slot time-slot-${index} h-[60px] border-t border-gray-200 dark:border-gray-700 relative ${isOver ? "bg-blue-50 dark:bg-blue-900/30" : ""} transition-colors duration-150`}
       >
         <div className="absolute left-0 top-[-10px] text-xs text-gray-500 dark:text-gray-400 w-[60px] text-right pr-2">
           {formatTimeForDisplay(time)}
@@ -903,13 +972,18 @@ const CalendarPanel = ({
 
   return (
     <Card
-      className={`w-[500px] bg-card text-card-foreground shadow-lg ${isOver ? "ring-2 ring-primary" : ""}`}
+      className={`${isEmbedded ? "w-full h-full shadow-none border-0" : "w-[500px]"} bg-card text-card-foreground ${!isEmbedded ? "shadow-lg" : ""} ${isOver ? "ring-2 ring-primary" : ""}`}
     >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <CalendarIcon className="h-5 w-5 text-gray-500" />
-            <CardTitle className="text-lg">Schedule</CardTitle>
+            {!hideScheduleHeader && (
+              <>
+                <CalendarIcon className="h-5 w-5 text-gray-500" />
+                <CardTitle className="text-lg">Schedule</CardTitle>
+              </>
+            )}
+
             <Button
               variant="outline"
               size="sm"
@@ -921,14 +995,26 @@ const CalendarPanel = ({
             <Badge variant="secondary" className="ml-2">
               {filteredTasks.length} tasks
             </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-2 text-xs h-7 px-2"
+              onClick={() => setShowBlockTimeDialog(true)}
+            >
+              Block Time
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowMonthView(!showMonthView)}
-          >
-            {showMonthView ? "View Day" : "View Month"}
-          </Button>
+          {!hideViewMonthButton && (
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowMonthView(!showMonthView)}
+              >
+                {showMonthView ? "View Day" : "View Month"}
+              </Button>
+            </div>
+          )}
         </div>
         {showMonthView ? (
           <div className="flex items-center justify-between mt-2">
@@ -1053,7 +1139,7 @@ const CalendarPanel = ({
                       key={`day-${day}`}
                       className={`p-1 border rounded-md h-[60px] overflow-hidden ${isSelected ? "bg-blue-50 border-blue-300" : "hover:bg-gray-50"}`}
                       onClick={() => {
-                        setSelectedDate(date);
+                        setInternalSelectedDate(date);
                         setShowMonthView(false);
                       }}
                     >
@@ -1095,8 +1181,12 @@ const CalendarPanel = ({
           <ScrollArea
             className="h-[500px] pr-4 overflow-visible"
             scrollHideDelay={0}
+            orientation="both"
           >
-            <div className="relative border-l border-gray-200 dark:border-gray-700 ml-[60px] bg-white dark:bg-gray-900">
+            <div
+              className="relative border-l border-gray-200 dark:border-gray-700 ml-[60px] bg-white dark:bg-gray-900"
+              style={{ minWidth: "300px" }}
+            >
               <div
                 ref={(node) => {
                   // Apply ref to the element
@@ -1104,11 +1194,14 @@ const CalendarPanel = ({
                   drop(node);
                 }}
                 className="relative"
-                style={{ minHeight: `${TIME_SLOTS.length * 60}px` }}
+                style={{
+                  minHeight: `${TIME_SLOTS.length * 60}px`,
+                  minWidth: "400px",
+                }}
               >
                 {/* Time slots - hourly intervals */}
-                {TIME_SLOTS.map((time) => (
-                  <TimeSlot key={time} time={time} />
+                {TIME_SLOTS.map((time, index) => (
+                  <TimeSlot key={time} time={time} index={index} />
                 ))}
 
                 {/* Current time indicator - only show for today */}
@@ -1121,7 +1214,9 @@ const CalendarPanel = ({
                     className="absolute left-0 right-0 border-t-2 border-red-400 border-dashed z-20 current-time-indicator"
                     style={{
                       top: `${calculateTaskPosition(`${currentTime.getHours().toString().padStart(2, "0")}:${currentTime.getMinutes().toString().padStart(2, "0")}`)}px`,
+                      width: "calc(100% + 100px)",
                     }}
+                    id="current-time-indicator"
                   >
                     <div className="absolute -top-2 -left-[60px] text-xs text-red-500 font-medium">
                       {formatTimeForDisplay(
@@ -1148,6 +1243,13 @@ const CalendarPanel = ({
           </ScrollArea>
         )}
       </CardContent>
+
+      {/* Block Time Dialog */}
+      <BlockTimeDialog
+        open={showBlockTimeDialog}
+        onOpenChange={setShowBlockTimeDialog}
+        onAddBlockedTime={onAddTask}
+      />
     </Card>
   );
 };

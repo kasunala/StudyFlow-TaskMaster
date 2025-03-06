@@ -4,6 +4,7 @@ import DashboardHeader from "./dashboard/DashboardHeader";
 import AssignmentGrid from "./dashboard/AssignmentGrid";
 import NotificationPanel from "./dashboard/NotificationPanel";
 import CalendarPanel from "./dashboard/CalendarPanel";
+
 import OnboardingDialog from "./onboarding/OnboardingDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/contexts/UserContext";
@@ -50,6 +51,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCalendar, setShowCalendar] = useState(true);
+
   const [showUpgradeDialog, setShowUpgradeDialog] = React.useState(false);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -170,6 +172,16 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
     // Otherwise update normally
     updateAssignment(assignment);
+
+    // Force an immediate refresh of drag handlers after assignment update
+    window.dispatchEvent(new Event("dragHandlersUpdate"));
+
+    // Multiple attempts with increasing delays to ensure handlers are attached
+    for (let delay of [10, 50, 100, 200, 500]) {
+      setTimeout(() => {
+        window.dispatchEvent(new Event("dragHandlersUpdate"));
+      }, delay);
+    }
   };
 
   // Listen for show-calendar events
@@ -186,6 +198,25 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
       window.removeEventListener("show-calendar", handleShowCalendar);
     };
   }, []);
+
+  // Focus on current time indicator when initially logging in
+  useEffect(() => {
+    if (currentUser && showCalendar) {
+      // Short delay to ensure the calendar has rendered
+      setTimeout(() => {
+        const currentTimeIndicator = document.querySelector(
+          ".current-time-indicator",
+        );
+        if (currentTimeIndicator) {
+          currentTimeIndicator.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+          console.log("Scrolled to current time indicator");
+        }
+      }, 1000);
+    }
+  }, [currentUser, showCalendar]);
 
   // Listen for focus-calendar-task events to show the calendar panel
   useEffect(() => {

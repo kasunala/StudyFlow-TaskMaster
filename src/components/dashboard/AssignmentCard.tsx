@@ -31,6 +31,7 @@ interface Task {
   id: string;
   title: string;
   completed: boolean;
+  duration?: number; // Duration in minutes
 }
 
 interface CalendarTask extends Task {
@@ -102,13 +103,60 @@ const AssignmentCard = ({
       window.dispatchEvent(new Event("dragHandlersUpdate"));
 
       // Multiple attempts with increasing delays to ensure handlers are attached
-      for (let delay of [50, 100, 200, 500, 1000]) {
+      for (let delay of [10, 50, 100, 200, 500, 1000]) {
         setTimeout(() => {
           window.dispatchEvent(new Event("dragHandlersUpdate"));
         }, delay);
       }
     }
   }, [tasks]);
+
+  // Listen for task-added events to ensure new tasks are draggable
+  React.useEffect(() => {
+    const handleTaskAdded = (event: CustomEvent) => {
+      const { taskId, assignmentId } = event.detail;
+      if (assignmentId === id) {
+        console.log("Task added event received for task:", taskId);
+        // Force re-initialization of drag handlers immediately
+        window.dispatchEvent(new Event("dragHandlersUpdate"));
+
+        // Multiple attempts with increasing delays and shorter initial delay
+        for (let delay of [10, 50, 100, 200, 500, 1000]) {
+          setTimeout(() => {
+            console.log(
+              `Updating drag handlers after ${delay}ms for task:`,
+              taskId,
+            );
+            window.dispatchEvent(new Event("dragHandlersUpdate"));
+
+            // Try to find the task element and manually initialize it
+            const taskElement = document.querySelector(
+              `[data-task-id="${taskId}"]`,
+            );
+            if (taskElement) {
+              console.log(
+                "Found task element, ensuring it's draggable:",
+                taskElement,
+              );
+              // Force a reflow
+              void taskElement.offsetHeight;
+            }
+          }, delay);
+        }
+      }
+    };
+
+    // Add event listener
+    window.addEventListener("task-added", handleTaskAdded as EventListener);
+
+    // Clean up
+    return () => {
+      window.removeEventListener(
+        "task-added",
+        handleTaskAdded as EventListener,
+      );
+    };
+  }, [id]);
 
   // Assignment cards are no longer draggable
   const completedTasks = localTasks.filter((task) => task.completed).length;
@@ -198,21 +246,59 @@ const AssignmentCard = ({
                   const [dragResult, drag] = useDrag(
                     () => ({
                       type: "task",
-                      item: {
-                        ...task,
-                        assignmentId: id,
-                        assignmentTitle: title,
-                        // Make sure these properties are included for newly added tasks
-                        id: task.id,
-                        title: task.title,
-                        completed: task.completed,
-                        index: taskIndex, // Include the task index for proper ordering
+                      item: (monitor) => {
+                        // Add visual feedback when drag starts
+                        const taskElement = document.querySelector(
+                          `[data-task-id="${task.id}"]`,
+                        )?.parentElement;
+                        if (taskElement) {
+                          taskElement.classList.add(
+                            "scale-95",
+                            "ring-2",
+                            "ring-primary/50",
+                            "bg-primary/5",
+                          );
+                        }
+
+                        return {
+                          ...task,
+                          assignmentId: id,
+                          assignmentTitle: title,
+                          // Make sure these properties are included for newly added tasks
+                          id: task.id,
+                          title: task.title,
+                          completed: task.completed,
+                          index: taskIndex, // Include the task index for proper ordering
+                        };
                       },
                       canDrag: true, // Allow dragging for all tasks
                       collect: (monitor) => ({
                         isDragging: !!monitor.isDragging(),
                       }),
+                      end: (item, monitor) => {
+                        // Log when drag ends to help debug
+                        console.log(
+                          "Drag ended for task:",
+                          item.id,
+                          "Dropped:",
+                          monitor.didDrop(),
+                        );
+
+                        // Remove visual feedback when drag ends
+                        const taskElement = document.querySelector(
+                          `[data-task-id="${task.id}"]`,
+                        )?.parentElement;
+                        if (taskElement) {
+                          taskElement.classList.remove(
+                            "scale-95",
+                            "ring-2",
+                            "ring-primary/50",
+                            "bg-primary/5",
+                          );
+                        }
+                      },
                     }),
+
                     // Dependencies that affect the drag behavior
                     [
                       task.id,
@@ -221,7 +307,6 @@ const AssignmentCard = ({
                       id,
                       title,
                       taskIndex, // Add taskIndex as a dependency
-                      calendarTasks,
                     ],
                   );
 
@@ -237,7 +322,7 @@ const AssignmentCard = ({
                 return (
                   <div
                     key={task.id}
-                    className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50" : ""}`}
+                    className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50 scale-95 ring-2 ring-primary/50 bg-primary/5" : "transition-all duration-200"}`}
                     style={{
                       cursor: calendarTasks.some(
                         (calTask) => calTask.id === task.id,
@@ -301,10 +386,13 @@ const AssignmentCard = ({
                     </div>
                     <div
                       ref={dragRef}
-                      className="flex items-center self-stretch cursor-grab"
+                      className={`flex items-center self-stretch cursor-grab p-1 rounded-md ${isDragging ? "bg-primary/20" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
                       title="Drag to calendar or reorder"
+                      data-task-id={task.id}
                     >
-                      <GripVertical className="h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                      <GripVertical
+                        className={`h-4 w-4 ${isDragging ? "text-primary" : "text-gray-400 dark:text-gray-500"} flex-shrink-0 transition-colors duration-200`}
+                      />
                     </div>
                   </div>
                 );

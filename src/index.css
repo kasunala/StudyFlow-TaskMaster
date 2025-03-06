@@ -103,3 +103,28 @@
       0 0 0 4px rgba(59, 130, 246, 0.3);
   }
 }
+
+/* Task dragging animation styles */
+.task-dragging {
+  @apply scale-95 ring-2 ring-primary/50 bg-primary/5 shadow-lg;
+  animation: task-drag-start 0.2s ease-out forwards;
+}
+
+@keyframes task-drag-start {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.task-drag-handle {
+  @apply transition-all duration-200;
+}
+
+.task-drag-handle:hover {
+  @apply bg-primary/10 rounded-md;
+}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, GripVertical } from "lucide-react";
+import { Calendar, GripVertical, Clock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import { useAssignments } from "@/contexts/AssignmentContext";
 
 interface OnboardingDialogProps {
   open: boolean;
@@ -21,7 +23,12 @@ interface OnboardingDialogProps {
     title: string;
     description: string;
     dueDate: string;
-    tasks: { id: string; title: string; completed: boolean }[];
+    tasks: {
+      id: string;
+      title: string;
+      completed: boolean;
+      duration?: number;
+    }[];
   }) => Promise<void> | void;
 }
 
@@ -30,26 +37,60 @@ const OnboardingDialog = ({
   onOpenChange,
   onCreateAssignment,
 }: OnboardingDialogProps) => {
+  const { assignments } = useAssignments();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+  const [isFirstAssignment, setIsFirstAssignment] = useState(true);
+
+  // Check if this is the first assignment
+  useEffect(() => {
+    if (assignments && assignments.length > 0) {
+      setIsFirstAssignment(false);
+    } else {
+      setIsFirstAssignment(true);
+    }
+  }, [assignments]);
 
   const handleAddTask = () => {
     if (newTask.trim()) {
       const newTaskId = Date.now().toString();
-      setTasks([...tasks, { id: newTaskId, title: newTask, completed: false }]);
+      const updatedTasks = [
+        ...tasks,
+        { id: newTaskId, title: newTask, completed: false, duration: 30 },
+      ];
+      setTasks(updatedTasks);
       setNewTask("");
 
-      // Dispatch event to ensure drag handlers are initialized with multiple attempts
-      // First immediate attempt
+      // Dispatch event to ensure drag handlers are initialized immediately
       window.dispatchEvent(new Event("dragHandlersUpdate"));
 
+      // Dispatch a custom event for the new task
+      window.dispatchEvent(
+        new CustomEvent("task-added", {
+          detail: {
+            taskId: newTaskId,
+            index: updatedTasks.length - 1,
+          },
+        }),
+      );
+
       // Multiple attempts with increasing delays to ensure handlers are attached
-      for (let delay of [50, 100, 200, 500, 1000]) {
+      // Start with a very short delay for quicker response
+      for (let delay of [10, 50, 100, 200, 500, 1000]) {
         setTimeout(() => {
           window.dispatchEvent(new Event("dragHandlersUpdate"));
+          // Re-dispatch the task-added event to ensure it's caught
+          window.dispatchEvent(
+            new CustomEvent("task-added", {
+              detail: {
+                taskId: newTaskId,
+                index: updatedTasks.length - 1,
+              },
+            }),
+          );
         }, delay);
       }
     }
@@ -100,7 +141,9 @@ const OnboardingDialog = ({
         <DialogHeader>
           <DialogTitle>Welcome to TaskMaster!</DialogTitle>
           <DialogDescription>
-            Let's create your first assignment to get started.
+            {isFirstAssignment
+              ? "Let's create your first assignment to get started."
+              : "Create a new assignment"}
           </DialogDescription>
         </DialogHeader>
 
@@ -140,6 +183,34 @@ const OnboardingDialog = ({
                 size="icon"
                 className="ml-2"
                 type="button"
+                onClick={() => {
+                  // Create a date picker element
+                  const datePicker = document.createElement("input");
+                  datePicker.type = "date";
+                  datePicker.style.display = "none";
+                  document.body.appendChild(datePicker);
+
+                  // Set initial value if available
+                  if (dueDate) {
+                    datePicker.value = dueDate;
+                  }
+
+                  // Handle date selection
+                  datePicker.addEventListener("change", (e) => {
+                    setDueDate(datePicker.value);
+                    document.body.removeChild(datePicker);
+                  });
+
+                  // Open the date picker
+                  datePicker.click();
+
+                  // Clean up if dialog is closed without selecting
+                  datePicker.addEventListener("blur", () => {
+                    if (document.body.contains(datePicker)) {
+                      document.body.removeChild(datePicker);
+                    }
+                  });
+                }}
               >
                 <Calendar className="h-4 w-4" />
               </Button>
@@ -152,27 +223,55 @@ const OnboardingDialog = ({
               {tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between p-2 border rounded-md"
+                  className="flex flex-col p-2 border rounded-md"
                 >
-                  <GripVertical className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
-                  <div className="flex items-center space-x-2 flex-1">
-                    <Checkbox id={`task-${task.id}`} />
-                    <Label
-                      htmlFor={`task-${task.id}`}
-                      className="cursor-pointer"
-                    >
-                      {task.title}
-                    </Label>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <GripVertical className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
+                      <div className="flex items-center space-x-2">
+                        <Checkbox id={`task-${task.id}`} />
+                        <Label
+                          htmlFor={`task-${task.id}`}
+                          className="cursor-pointer"
+                        >
+                          {task.title}
+                        </Label>
+                      </div>
+                    </div>
+                    {task.title !== "Warm-up task" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveTask(task.id)}
+                      >
+                        Remove
+                      </Button>
+                    )}
                   </div>
-                  {task.title !== "Warm-up task" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveTask(task.id)}
-                    >
-                      Remove
-                    </Button>
-                  )}
+
+                  <div className="mt-2 pl-6 flex items-center space-x-2">
+                    <Clock className="h-4 w-4 text-gray-400" />
+                    <div className="flex-1">
+                      <Slider
+                        value={[task.duration || 30]}
+                        min={15}
+                        max={240}
+                        step={15}
+                        onValueChange={(value) => {
+                          const updatedTasks = tasks.map((t) => {
+                            if (t.id === task.id) {
+                              return { ...t, duration: value[0] };
+                            }
+                            return t;
+                          });
+                          setTasks(updatedTasks);
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-12">
+                      {task.duration || 30} min
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

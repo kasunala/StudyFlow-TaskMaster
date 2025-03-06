@@ -2,6 +2,7 @@ export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  duration?: number; // Duration in minutes
 }
 
 export interface Assignment {

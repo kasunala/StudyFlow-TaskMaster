@@ -40,6 +40,10 @@ export interface CalendarTask {
   endTime?: string; // Format: "HH:MM" (24-hour format)
   duration?: number; // Duration in minutes
   date?: string; // ISO date string format YYYY-MM-DD
+  isBlockedTime?: boolean; // Flag to indicate if this is a blocked time entry
+  isRecurring?: boolean; // Flag to indicate if this is a recurring event
+  recurrenceType?: "daily" | "weekly"; // Type of recurrence
+  recurrenceEndDate?: string; // End date for recurring events
 }
 
 interface CalendarContextType {
