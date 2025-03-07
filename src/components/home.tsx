@@ -131,8 +131,9 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     navigate("/login");
   };
 
-  const handleAddCalendarTask = (task: CalendarTask) => {
-    addCalendarTask(task);
+  const handleAddCalendarTask = async (task: CalendarTask) => {
+    console.log("handleAddCalendarTask called with:", task);
+    await addCalendarTask(task);
   };
 
   const handleRemoveCalendarTask = (taskId: string) => {

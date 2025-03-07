@@ -88,36 +88,38 @@ const EditAssignmentDialog = ({
           tasks: updatedTasks,
         });
 
-        // Dispatch a custom event to notify that a new task was added immediately
-        window.dispatchEvent(
-          new CustomEvent("task-added", {
-            detail: {
-              taskId: newTaskId,
-              assignmentId: assignment.id,
-              index: updatedTasks.length - 1,
-            },
-          }),
-        );
+        // Use requestAnimationFrame to ensure DOM is updated before dispatching events
+        requestAnimationFrame(() => {
+          // Dispatch a custom event to notify that a new task was added
+          window.dispatchEvent(
+            new CustomEvent("task-added", {
+              detail: {
+                taskId: newTaskId,
+                assignmentId: assignment.id,
+                index: updatedTasks.length - 1,
+              },
+            })
+          );
 
-        // Force re-initialization of drag handlers immediately
-        window.dispatchEvent(new Event("dragHandlersUpdate"));
+          // Force re-initialization of drag handlers
+          window.dispatchEvent(new Event("dragHandlersUpdate"));
 
-        // Multiple attempts with increasing delays to ensure handlers are attached
-        for (let delay of [10, 50, 100, 200, 500, 1000]) {
-          setTimeout(() => {
-            window.dispatchEvent(new Event("dragHandlersUpdate"));
-            // Also re-dispatch the task-added event to ensure it's caught
-            window.dispatchEvent(
-              new CustomEvent("task-added", {
-                detail: {
-                  taskId: newTaskId,
-                  assignmentId: assignment.id,
-                  index: updatedTasks.length - 1,
-                },
-              }),
-            );
-          }, delay);
-        }
+          // Use fewer, more strategic timeouts
+          [50, 150].forEach(delay => {
+            setTimeout(() => {
+              window.dispatchEvent(new Event("dragHandlersUpdate"));
+              window.dispatchEvent(
+                new CustomEvent("task-added", {
+                  detail: {
+                    taskId: newTaskId,
+                    assignmentId: assignment.id,
+                    index: updatedTasks.length - 1,
+                  },
+                })
+              );
+            }, delay);
+          });
+        });
       }
     }
   };
@@ -350,7 +352,6 @@ const EditAssignmentDialog = ({
                     description: "",
                     dueDate: "",
                     tasks: [],
-                    _delete: true,
                   });
                 }
               }}

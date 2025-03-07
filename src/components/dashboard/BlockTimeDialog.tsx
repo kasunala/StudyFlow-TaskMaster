@@ -19,9 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarTask } from "@/contexts/CalendarContext";
+import { CalendarTask, useCalendar } from "@/contexts/CalendarContext";
 import { Checkbox } from "@/components/ui/checkbox";
 import { addDays, format, isAfter, isBefore, parseISO } from "date-fns";
+import { checkTimeOverlap, calculateEndTime } from "@/utils/calendarUtils";
 
 interface BlockTimeDialogProps {
   open: boolean;
@@ -29,7 +30,7 @@ interface BlockTimeDialogProps {
   onAddBlockedTime: (task: CalendarTask) => void;
 }
 
-type RecurrenceType = "none" | "daily" | "weekly";
+type RecurrenceType = "daily" | "weekly";
 type WeekDay =
   | "monday"
   | "tuesday"
@@ -52,21 +53,7 @@ const generateTimeSelectionSlots = () => {
   return slots;
 };
 
-// Calculate end time based on start time and duration
-const calculateEndTime = (
-  startTime: string,
-  durationMinutes: number,
-): string => {
-  if (!startTime) return "";
-  const [hourStr, minuteStr] = startTime.split(":");
-  const [hour, minute] = [parseInt(hourStr), parseInt(minuteStr)];
-
-  let totalMinutes = hour * 60 + minute + durationMinutes;
-  const newHour = Math.floor(totalMinutes / 60) % 24;
-  const newMinute = totalMinutes % 60;
-
-  return `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`;
-};
+// Calculate end time based on start time and duration is now imported from calendarUtils
 
 // Get day of week from date string
 const getDayOfWeek = (dateString: string): WeekDay => {
@@ -90,28 +77,40 @@ const generateRecurringDates = (
   recurrenceType: RecurrenceType,
   selectedDays: WeekDay[] = [],
 ): string[] => {
-  if (recurrenceType === "none") return [startDate];
+  console.log("generateRecurringDates called with:", { startDate, endDate, recurrenceType, selectedDays });
+  
+  // Always return at least the start date
+  const dates: string[] = [startDate];
+  
+  // If not recurring or no valid recurrence type, just return the start date
+  if (!recurrenceType) {
+    console.log("No recurrence type provided, returning single date:", startDate);
+    return dates;
+  }
 
-  const dates: string[] = [];
   const start = parseISO(startDate);
   const end = parseISO(endDate);
 
-  let current = start;
+  // For recurring events, add additional dates
+  if (recurrenceType === "daily" || recurrenceType === "weekly") {
+    let current = addDays(start, 1); // Start from the next day
 
-  while (isBefore(current, end) || format(current, "yyyy-MM-dd") === endDate) {
-    const currentDateStr = format(current, "yyyy-MM-dd");
-    const dayOfWeek = getDayOfWeek(currentDateStr);
+    while (isBefore(current, end) || format(current, "yyyy-MM-dd") === endDate) {
+      const currentDateStr = format(current, "yyyy-MM-dd");
+      const dayOfWeek = getDayOfWeek(currentDateStr);
 
-    if (
-      recurrenceType === "daily" ||
-      (recurrenceType === "weekly" && selectedDays.includes(dayOfWeek))
-    ) {
-      dates.push(currentDateStr);
+      if (
+        recurrenceType === "daily" ||
+        (recurrenceType === "weekly" && selectedDays.includes(dayOfWeek))
+      ) {
+        dates.push(currentDateStr);
+      }
+
+      current = addDays(current, 1);
     }
-
-    current = addDays(current, 1);
   }
 
+  console.log("Generated dates:", dates);
   return dates;
 };
 
@@ -136,6 +135,8 @@ const BlockTimeDialog = ({
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   );
   const [selectedDays, setSelectedDays] = useState<WeekDay[]>([]);
+
+  const { calendarTasks } = useCalendar();
 
   // Initialize selected days based on start date
   React.useEffect(() => {
@@ -180,8 +181,19 @@ const BlockTimeDialog = ({
     });
   };
 
-  const handleSubmit = () => {
-    if (!title || !date || !startTime || !endTime) return;
+  const handleSubmit = async () => {
+    if (!title || !date || !startTime || !endTime) {
+      console.log("Missing required fields:", { title, date, startTime, endTime });
+      return;
+    }
+
+    console.log("Submitting blocked time:", {
+      isRecurring,
+      recurrenceType,
+      date,
+      endDate,
+      selectedDays,
+    });
 
     // For recurring events, generate all dates
     const dates = isRecurring
@@ -193,8 +205,32 @@ const BlockTimeDialog = ({
         )
       : [date];
 
+    console.log("Dates to create blocked time for:", dates);
+
+    // Calculate duration in minutes
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+    const startMinutes = startHour * 60 + startMinute;
+    let endMinutes = endHour * 60 + endMinute;
+    
+    // Handle case where end time is on the next day
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60; // Add 24 hours
+    }
+    
+    const calculatedDuration = endMinutes - startMinutes;
+
     // Create a blocked time task for each date
-    dates.forEach((dateStr, index) => {
+    const addPromises = dates.map(async (dateStr, index) => {
+      // Get tasks for this specific date
+      const tasksForDate = calendarTasks.filter(task => task.date === dateStr);
+      
+      // Skip dates where there would be an overlap
+      if (checkTimeOverlap(startTime, calculatedDuration, tasksForDate, undefined, true)) {
+        console.log(`Skipping blocked time for ${dateStr} due to overlap`);
+        return null;
+      }
+
       const blockedTimeTask: CalendarTask = {
         id: `blocked-time-${Date.now()}-${index}`,
         title: isRecurring
@@ -205,24 +241,34 @@ const BlockTimeDialog = ({
         assignmentTitle: "Blocked Time",
         startTime,
         endTime,
-        duration,
+        duration: calculatedDuration,
         date: dateStr,
         isBlockedTime: true,
         isRecurring: isRecurring,
-        recurrenceType: isRecurring ? recurrenceType : undefined,
+        // Use null instead of undefined for Firestore compatibility
+        recurrenceType: isRecurring ? recurrenceType : null,
       };
 
-      onAddBlockedTime(blockedTimeTask);
+      console.log("Creating blocked time task:", blockedTimeTask);
+      await onAddBlockedTime(blockedTimeTask);
+      return blockedTimeTask;
     });
 
+    // Wait for all tasks to be added
+    const results = await Promise.all(addPromises);
+    
+    // Check if any blocked times were skipped due to overlaps
+    const skippedDates = results.filter(result => result === null).length;
+    if (skippedDates > 0) {
+      console.log(`${skippedDates} blocked times were skipped due to overlaps`);
+      // You could show a notification to the user here
+    }
+    
+    // Force a refresh of the calendar by dispatching a custom event
+    window.dispatchEvent(new CustomEvent('calendar-tasks-updated'));
+    
+    // Close the dialog
     onOpenChange(false);
-
-    // Reset form
-    setTitle("Blocked Time");
-    setStartTime("09:00");
-    setDuration(30);
-    setIsRecurring(false);
-    setRecurrenceType("daily");
   };
 
   return (

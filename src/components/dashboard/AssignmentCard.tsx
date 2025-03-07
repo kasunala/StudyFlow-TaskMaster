@@ -97,17 +97,23 @@ const AssignmentCard = ({
   // Update local tasks when props change and ensure they're immediately draggable
   React.useEffect(() => {
     setLocalTasks(tasks);
+    
     // Force a re-render to ensure drag handlers are properly attached
     if (cardRef.current) {
       // Immediate attempt
       window.dispatchEvent(new Event("dragHandlersUpdate"));
 
-      // Multiple attempts with increasing delays to ensure handlers are attached
-      for (let delay of [10, 50, 100, 200, 500, 1000]) {
-        setTimeout(() => {
-          window.dispatchEvent(new Event("dragHandlersUpdate"));
-        }, delay);
-      }
+      // Use requestAnimationFrame for better timing with DOM updates
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("dragHandlersUpdate"));
+        
+        // Multiple attempts with increasing delays to ensure handlers are attached
+        for (let delay of [10, 50, 100, 200, 500]) {
+          setTimeout(() => {
+            window.dispatchEvent(new Event("dragHandlersUpdate"));
+          }, delay);
+        }
+      });
     }
   }, [tasks]);
 
@@ -117,32 +123,30 @@ const AssignmentCard = ({
       const { taskId, assignmentId } = event.detail;
       if (assignmentId === id) {
         console.log("Task added event received for task:", taskId);
-        // Force re-initialization of drag handlers immediately
-        window.dispatchEvent(new Event("dragHandlersUpdate"));
-
-        // Multiple attempts with increasing delays and shorter initial delay
-        for (let delay of [10, 50, 100, 200, 500, 1000]) {
-          setTimeout(() => {
-            console.log(
-              `Updating drag handlers after ${delay}ms for task:`,
-              taskId,
-            );
-            window.dispatchEvent(new Event("dragHandlersUpdate"));
-
-            // Try to find the task element and manually initialize it
-            const taskElement = document.querySelector(
-              `[data-task-id="${taskId}"]`,
-            );
-            if (taskElement) {
-              console.log(
-                "Found task element, ensuring it's draggable:",
-                taskElement,
-              );
-              // Force a reflow
-              void taskElement.offsetHeight;
+        
+        // Force re-initialization of drag handlers with requestAnimationFrame
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event("dragHandlersUpdate"));
+          
+          // Try to find the task element and manually initialize it
+          const taskElement = document.querySelector(
+            `[data-task-id="${taskId}"]`,
+          ) as HTMLElement | null;
+          
+          if (taskElement) {
+            console.log("Found task element, ensuring it's draggable:", taskElement);
+            // Force a reflow
+            void taskElement.offsetHeight;
+            
+            // Multiple attempts with increasing delays
+            for (let delay of [10, 50, 100, 200]) {
+              setTimeout(() => {
+                console.log(`Updating drag handlers after ${delay}ms for task:`, taskId);
+                window.dispatchEvent(new Event("dragHandlersUpdate"));
+              }, delay);
             }
-          }, delay);
-        }
+          }
+        });
       }
     };
 
@@ -275,7 +279,7 @@ const AssignmentCard = ({
                       collect: (monitor) => ({
                         isDragging: !!monitor.isDragging(),
                       }),
-                      end: (item, monitor) => {
+                      end: (item: any, monitor) => {
                         // Log when drag ends to help debug
                         console.log(
                           "Drag ended for task:",
@@ -322,6 +326,7 @@ const AssignmentCard = ({
                 return (
                   <div
                     key={task.id}
+                    data-task-id={task.id}
                     className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50 scale-95 ring-2 ring-primary/50 bg-primary/5" : "transition-all duration-200"}`}
                     style={{
                       cursor: calendarTasks.some(
@@ -330,10 +335,12 @@ const AssignmentCard = ({
                         ? "default"
                         : "grab",
                     }}
+                    ref={dragRef}
                   >
                     <div className="flex items-center space-x-2 flex-grow">
                       <Checkbox
                         id={task.id}
+                        data-task-id={task.id}
                         checked={task.completed}
                         onCheckedChange={() => onTaskToggle(task.id)}
                       />
@@ -385,10 +392,8 @@ const AssignmentCard = ({
                       </div>
                     </div>
                     <div
-                      ref={dragRef}
                       className={`flex items-center self-stretch cursor-grab p-1 rounded-md ${isDragging ? "bg-primary/20" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
                       title="Drag to calendar or reorder"
-                      data-task-id={task.id}
                     >
                       <GripVertical
                         className={`h-4 w-4 ${isDragging ? "text-primary" : "text-gray-400 dark:text-gray-500"} flex-shrink-0 transition-colors duration-200`}

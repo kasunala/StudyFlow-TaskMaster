@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { checkTimeOverlap, calculateEndTime } from "@/utils/calendarUtils";
 
 interface Task {
   id: string;
@@ -91,21 +92,7 @@ const generateTimeSelectionSlots = () => {
 // This function is now just a wrapper around the context's formatTime function
 // It will be initialized in the component
 
-// Calculate end time based on start time and duration
-const calculateEndTime = (
-  startTime: string,
-  durationMinutes: number,
-): string => {
-  if (!startTime) return "";
-  const [hourStr, minuteStr] = startTime.split(":");
-  const [hour, minute] = [parseInt(hourStr), parseInt(minuteStr)];
-
-  let totalMinutes = hour * 60 + minute + durationMinutes;
-  const newHour = Math.floor(totalMinutes / 60);
-  const newMinute = totalMinutes % 60;
-
-  return `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`;
-};
+// Calculate end time based on start time and duration is now imported from calendarUtils
 
 const TIME_SLOTS = generateTimeSlots();
 const TIME_SELECTION_SLOTS = generateTimeSelectionSlots();
@@ -323,6 +310,21 @@ const CalendarPanel = ({
     };
   }, [calendarTasks]);
 
+  // Listen for calendar-tasks-updated events
+  useEffect(() => {
+    const handleCalendarTasksUpdated = () => {
+      console.log("Calendar tasks updated event received, refreshing view");
+      // Force a re-render by updating a state variable
+      setHoveredTimeSlot(null);
+    };
+
+    window.addEventListener("calendar-tasks-updated", handleCalendarTasksUpdated);
+
+    return () => {
+      window.removeEventListener("calendar-tasks-updated", handleCalendarTasksUpdated);
+    };
+  }, []);
+
   // Filter tasks for the selected date
   const filteredTasks = calendarTasks.filter((task) => {
     // If task has no date, assign it today's date for the demo using local timezone
@@ -333,43 +335,22 @@ const CalendarPanel = ({
     return task.date === selectedDateISO;
   });
 
+  console.log("Filtered tasks for date:", selectedDateISO, filteredTasks);
+
   // Check if a new task would overlap with existing tasks
   const checkForOverlap = (
     startTime: string,
     duration: number,
     taskIdToExclude?: string,
+    isBlockedTime?: boolean,
   ): boolean => {
-    // Only check tasks for the selected date
-    const tasksForDay = taskIdToExclude
-      ? filteredTasks.filter((task) => task.id !== taskIdToExclude)
-      : filteredTasks;
-
-    // Convert the new task's start and end times to minutes since midnight
-    const [startHour, startMinute] = startTime.split(":").map(Number);
-    const startMinutes = startHour * 60 + startMinute;
-    const endMinutes = startMinutes + duration;
-
-    // Check against each existing task
-    for (const task of tasksForDay) {
-      if (!task.startTime) continue;
-
-      const [taskStartHour, taskStartMinute] = task.startTime
-        .split(":")
-        .map(Number);
-      const taskStartMinutes = taskStartHour * 60 + taskStartMinute;
-      const taskEndMinutes = taskStartMinutes + (task.duration || 30);
-
-      // Check for overlap
-      if (
-        (startMinutes >= taskStartMinutes && startMinutes < taskEndMinutes) || // New task starts during existing task
-        (endMinutes > taskStartMinutes && endMinutes <= taskEndMinutes) || // New task ends during existing task
-        (startMinutes <= taskStartMinutes && endMinutes >= taskEndMinutes) // New task completely contains existing task
-      ) {
-        return true; // Overlap detected
-      }
-    }
-
-    return false; // No overlap
+    return checkTimeOverlap(
+      startTime,
+      duration,
+      filteredTasks,
+      taskIdToExclude,
+      isBlockedTime
+    );
   };
 
   // Find the next available time slot after a given time
@@ -630,7 +611,7 @@ const CalendarPanel = ({
                   <div className="flex items-center w-full mb-1">
                     <span className="text-xs mr-2">Duration:</span>
                     <div
-                      className={`flex-1 ${checkForOverlap(task.startTime || "08:00", sliderValue, task.id) && sliderValue > (task.duration || 30) ? "bg-red-100 rounded p-1" : ""}`}
+                      className={`flex-1 ${checkForOverlap(task.startTime || "08:00", sliderValue, task.id, task.isBlockedTime) && sliderValue > (task.duration || 30) ? "bg-red-100 rounded p-1" : ""}`}
                     >
                       <Slider
                         value={[sliderValue]}
@@ -650,6 +631,7 @@ const CalendarPanel = ({
                             task.startTime || "08:00",
                             duration,
                             task.id,
+                            task.isBlockedTime,
                           );
 
                           // If it would overlap, find the maximum duration that doesn't overlap
@@ -665,6 +647,7 @@ const CalendarPanel = ({
                                   task.startTime || "08:00",
                                   maxDuration + 15,
                                   task.id,
+                                  task.isBlockedTime,
                                 )
                               ) {
                                 maxDuration += 15;
@@ -702,6 +685,7 @@ const CalendarPanel = ({
                         task.startTime || "08:00",
                         sliderValue,
                         task.id,
+                        task.isBlockedTime,
                       ) &&
                         sliderValue > (task.duration || 30) && (
                           <div className="text-xs text-red-500 mt-1">
@@ -729,7 +713,7 @@ const CalendarPanel = ({
 
                           // Check for overlaps
                           if (
-                            !checkForOverlap(newStartTime, sliderValue, task.id)
+                            !checkForOverlap(newStartTime, sliderValue, task.id, task.isBlockedTime)
                           ) {
                             onUpdateTaskTime(
                               task.id,
@@ -800,7 +784,7 @@ const CalendarPanel = ({
 
                           // Check for overlaps
                           if (
-                            !checkForOverlap(startTime, newDuration, task.id)
+                            !checkForOverlap(startTime, newDuration, task.id, task.isBlockedTime)
                           ) {
                             onUpdateTaskTime(
                               task.id,
@@ -818,6 +802,7 @@ const CalendarPanel = ({
                                   startTime,
                                   maxDuration + 15,
                                   task.id,
+                                  task.isBlockedTime,
                                 )
                               ) {
                                 maxDuration += 15;
@@ -920,7 +905,7 @@ const CalendarPanel = ({
 
         // Check if the selected time slot would cause an overlap (excluding the task being moved)
         let finalTimeSlot = time;
-        if (checkForOverlap(time, duration, item.id)) {
+        if (checkForOverlap(time, duration, item.id, item.isBlockedTime)) {
           // Find the next available time slot
           finalTimeSlot = findNextAvailableSlot(time, duration);
         }
@@ -1128,7 +1113,14 @@ const CalendarPanel = ({
                 // Add cells for each day of the month
                 for (let day = 1; day <= daysInMonth; day++) {
                   const date = new Date(selectedYear, selectedMonth, day);
-                  const dateISO = date.toISOString().split("T")[0];
+                  // Format date as ISO string and extract the date part (YYYY-MM-DD)
+                  const dateISO = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                  
+                  const isToday = dateISO === (() => {
+                    const today = new Date();
+                    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                  })();
+                  
                   const isSelected = dateISO === selectedDateISO;
                   const tasksForDay = calendarTasks.filter(
                     (task) => task.date === dateISO,
@@ -1137,7 +1129,7 @@ const CalendarPanel = ({
                   days.push(
                     <div
                       key={`day-${day}`}
-                      className={`p-1 border rounded-md h-[60px] overflow-hidden ${isSelected ? "bg-blue-50 border-blue-300" : "hover:bg-gray-50"}`}
+                      className={`p-1 border rounded-md h-[60px] overflow-hidden ${isSelected ? "bg-blue-50 border-blue-300 dark:bg-blue-900/30 dark:border-blue-700" : isToday ? "bg-gray-50 border-gray-300 dark:bg-gray-800/50 dark:border-gray-600" : "hover:bg-gray-50 dark:hover:bg-gray-800/30"}`}
                       onClick={() => {
                         setInternalSelectedDate(date);
                         setShowMonthView(false);
@@ -1145,7 +1137,7 @@ const CalendarPanel = ({
                     >
                       <div className="flex justify-between items-center">
                         <span
-                          className={`text-sm ${isSelected ? "font-bold" : ""}`}
+                          className={`text-sm ${isSelected ? "font-bold text-primary" : isToday ? "font-semibold" : ""}`}
                         >
                           {day}
                         </span>

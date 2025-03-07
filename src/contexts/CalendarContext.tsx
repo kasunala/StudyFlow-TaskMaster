@@ -12,6 +12,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { app } from "@/lib/firebase";
+import { checkTimeOverlap, calculateEndTime } from "@/utils/calendarUtils";
 
 // Initialize Firestore only if Firebase is available
 let db: any;
@@ -42,7 +43,7 @@ export interface CalendarTask {
   date?: string; // ISO date string format YYYY-MM-DD
   isBlockedTime?: boolean; // Flag to indicate if this is a blocked time entry
   isRecurring?: boolean; // Flag to indicate if this is a recurring event
-  recurrenceType?: "daily" | "weekly"; // Type of recurrence
+  recurrenceType?: "daily" | "weekly" | null; // Type of recurrence
   recurrenceEndDate?: string; // End date for recurring events
 }
 
@@ -58,21 +59,6 @@ interface CalendarContextType {
     duration?: number,
   ) => Promise<void>;
 }
-
-// Helper function to calculate end time based on start time and duration
-const calculateEndTime = (
-  startTime: string,
-  durationMinutes: number,
-): string => {
-  const [hourStr, minuteStr] = startTime.split(":");
-  const [hour, minute] = [parseInt(hourStr), parseInt(minuteStr)];
-
-  let totalMinutes = hour * 60 + minute + durationMinutes;
-  const newHour = Math.floor(totalMinutes / 60);
-  const newMinute = totalMinutes % 60;
-
-  return `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`;
-};
 
 const CalendarContext = createContext<CalendarContextType>(null!);
 
@@ -116,13 +102,37 @@ export const CalendarProvider = ({
   }, [currentUser]);
 
   const addCalendarTask = async (task: CalendarTask) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log("No current user, cannot add calendar task");
+      return;
+    }
 
     try {
+      console.log("Adding calendar task:", task);
+      
       // Check if task already exists
       if (calendarTasks.some((t) => t.id === task.id)) {
         console.log("Task already exists in calendar");
         return;
+      }
+
+      // Get tasks for the same date
+      const tasksForDate = calendarTasks.filter(t => t.date === task.date);
+      
+      // Check for overlaps with blocked times or if this is a blocked time, check for overlaps with all tasks
+      if (task.startTime && task.duration) {
+        const hasOverlap = checkTimeOverlap(
+          task.startTime,
+          task.duration,
+          tasksForDate,
+          undefined,
+          task.isBlockedTime
+        );
+        
+        if (hasOverlap) {
+          console.log("Task overlaps with blocked times or other tasks, cannot add");
+          return;
+        }
       }
 
       // Create a new document reference
@@ -137,9 +147,14 @@ export const CalendarProvider = ({
 
       // Save to Firestore
       await setDoc(taskDocRef, taskWithUser);
+      console.log("Task saved to Firestore:", taskWithUser);
 
       // Update local state
-      setCalendarTasks([...calendarTasks, taskWithUser]);
+      setCalendarTasks((prevTasks) => [...prevTasks, taskWithUser]);
+      console.log("Local calendar tasks updated");
+      
+      // Dispatch an event to notify components that calendar tasks have been updated
+      window.dispatchEvent(new CustomEvent('calendar-tasks-updated'));
     } catch (error) {
       console.error("Error adding calendar task:", error);
     }
@@ -206,12 +221,33 @@ export const CalendarProvider = ({
       const taskToUpdate = calendarTasks.find((task) => task.id === taskId);
       if (!taskToUpdate) return;
 
+      // Calculate duration if not provided
+      const calculatedDuration = duration || 30;
+      const calculatedEndTime = endTime || calculateEndTime(startTime, calculatedDuration);
+
+      // Get tasks for the same date
+      const tasksForDate = calendarTasks.filter(t => t.date === taskToUpdate.date);
+      
+      // Check for overlaps with blocked times or if this is a blocked time, check for overlaps with all tasks
+      const hasOverlap = checkTimeOverlap(
+        startTime,
+        calculatedDuration,
+        tasksForDate,
+        taskId,
+        taskToUpdate.isBlockedTime
+      );
+      
+      if (hasOverlap) {
+        console.log("Task would overlap with blocked times or other tasks, cannot update");
+        return;
+      }
+
       // Create updated task object
       const updatedTask = {
         ...taskToUpdate,
         startTime,
-        endTime: endTime || calculateEndTime(startTime, duration || 30),
-        duration: duration || 30,
+        endTime: calculatedEndTime,
+        duration: calculatedDuration,
         updatedAt: new Date().toISOString(),
       };
 
