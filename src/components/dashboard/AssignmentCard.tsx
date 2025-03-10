@@ -102,17 +102,10 @@ const AssignmentCard = ({
     if (cardRef.current) {
       // Immediate attempt
       window.dispatchEvent(new Event("dragHandlersUpdate"));
-
+      
       // Use requestAnimationFrame for better timing with DOM updates
       requestAnimationFrame(() => {
         window.dispatchEvent(new Event("dragHandlersUpdate"));
-        
-        // Multiple attempts with increasing delays to ensure handlers are attached
-        for (let delay of [10, 50, 100, 200, 500]) {
-          setTimeout(() => {
-            window.dispatchEvent(new Event("dragHandlersUpdate"));
-          }, delay);
-        }
       });
     }
   }, [tasks]);
@@ -120,33 +113,16 @@ const AssignmentCard = ({
   // Listen for task-added events to ensure new tasks are draggable
   React.useEffect(() => {
     const handleTaskAdded = (event: CustomEvent) => {
-      const { taskId, assignmentId } = event.detail;
-      if (assignmentId === id) {
-        console.log("Task added event received for task:", taskId);
+      try {
+        const { taskId, assignmentId } = event.detail;
         
-        // Force re-initialization of drag handlers with requestAnimationFrame
-        requestAnimationFrame(() => {
-          window.dispatchEvent(new Event("dragHandlersUpdate"));
-          
-          // Try to find the task element and manually initialize it
-          const taskElement = document.querySelector(
-            `[data-task-id="${taskId}"]`,
-          ) as HTMLElement | null;
-          
-          if (taskElement) {
-            console.log("Found task element, ensuring it's draggable:", taskElement);
-            // Force a reflow
-            void taskElement.offsetHeight;
-            
-            // Multiple attempts with increasing delays
-            for (let delay of [10, 50, 100, 200]) {
-              setTimeout(() => {
-                console.log(`Updating drag handlers after ${delay}ms for task:`, taskId);
-                window.dispatchEvent(new Event("dragHandlersUpdate"));
-              }, delay);
-            }
-          }
-        });
+        if (assignmentId === id) {
+          // Force a re-render with the current tasks
+          // This is critical for drag functionality to be initialized
+          setLocalTasks(prevTasks => [...prevTasks]);
+        }
+      } catch (error) {
+        console.error("Error handling task-added event:", error);
       }
     };
 
@@ -240,166 +216,19 @@ const AssignmentCard = ({
           <CollapsibleContent>
             <div className="space-y-2 mt-2 max-h-[200px] overflow-y-auto">
               {localTasks.map((task, taskIndex) => {
-                // Safely use useDrag only if we're in a DndProvider context
-                let dragRef: any = null;
-                let isDragging = false;
-
-                // Wrap useDrag in a try-catch to handle cases where DndProvider context is missing
-                try {
-                  // For dragging to calendar
-                  const [dragResult, drag] = useDrag(
-                    () => ({
-                      type: "task",
-                      item: (monitor) => {
-                        // Add visual feedback when drag starts
-                        const taskElement = document.querySelector(
-                          `[data-task-id="${task.id}"]`,
-                        )?.parentElement;
-                        if (taskElement) {
-                          taskElement.classList.add(
-                            "scale-95",
-                            "ring-2",
-                            "ring-primary/50",
-                            "bg-primary/5",
-                          );
-                        }
-
-                        return {
-                          ...task,
-                          assignmentId: id,
-                          assignmentTitle: title,
-                          // Make sure these properties are included for newly added tasks
-                          id: task.id,
-                          title: task.title,
-                          completed: task.completed,
-                          index: taskIndex, // Include the task index for proper ordering
-                        };
-                      },
-                      canDrag: true, // Allow dragging for all tasks
-                      collect: (monitor) => ({
-                        isDragging: !!monitor.isDragging(),
-                      }),
-                      end: (item: any, monitor) => {
-                        // Log when drag ends to help debug
-                        console.log(
-                          "Drag ended for task:",
-                          item.id,
-                          "Dropped:",
-                          monitor.didDrop(),
-                        );
-
-                        // Remove visual feedback when drag ends
-                        const taskElement = document.querySelector(
-                          `[data-task-id="${task.id}"]`,
-                        )?.parentElement;
-                        if (taskElement) {
-                          taskElement.classList.remove(
-                            "scale-95",
-                            "ring-2",
-                            "ring-primary/50",
-                            "bg-primary/5",
-                          );
-                        }
-                      },
-                    }),
-
-                    // Dependencies that affect the drag behavior
-                    [
-                      task.id,
-                      task.title,
-                      task.completed,
-                      id,
-                      title,
-                      taskIndex, // Add taskIndex as a dependency
-                    ],
-                  );
-
-                  dragRef = drag;
-                  isDragging = dragResult.isDragging;
-                } catch (error) {
-                  // Silently handle the error when DndProvider context is missing
-                  console.log("DnD not available in this context", error);
-                  dragRef = null;
-                  isDragging = false;
-                }
-
+                // Create a unique key for this task instance
+                const taskKey = `${task.id}-${taskIndex}`;
+                
                 return (
-                  <div
-                    key={task.id}
-                    data-task-id={task.id}
-                    className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50 scale-95 ring-2 ring-primary/50 bg-primary/5" : "transition-all duration-200"}`}
-                    style={{
-                      cursor: calendarTasks.some(
-                        (calTask) => calTask.id === task.id,
-                      )
-                        ? "default"
-                        : "grab",
-                    }}
-                    ref={dragRef}
-                  >
-                    <div className="flex items-center space-x-2 flex-grow">
-                      <Checkbox
-                        id={task.id}
-                        data-task-id={task.id}
-                        checked={task.completed}
-                        onCheckedChange={() => onTaskToggle(task.id)}
-                      />
-                      <div className="flex items-center flex-grow">
-                        {calendarTasks.some(
-                          (calTask) => calTask.id === task.id,
-                        ) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-
-                              // Find the calendar task
-                              const calTask = calendarTasks.find(
-                                (ct) => ct.id === task.id,
-                              );
-                              if (!calTask) {
-                                console.error(
-                                  "Calendar task not found for ID:",
-                                  task.id,
-                                );
-                                return;
-                              }
-
-                              // Show tooltip with date and time information
-                              const dateStr = calTask.date
-                                ? new Date(calTask.date).toLocaleDateString()
-                                : "";
-                              const timeStr = calTask.startTime
-                                ? formatTime(calTask.startTime)
-                                : "";
-                              alert(
-                                `Task scheduled for: ${dateStr} at ${timeStr}`,
-                              );
-                            }}
-                            className="mr-2 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900 rounded-full p-1"
-                            aria-label="View in calendar"
-                            title={`Scheduled: ${calendarTasks.find((calTask) => calTask.id === task.id)?.date ? new Date(calendarTasks.find((calTask) => calTask.id === task.id)?.date || "").toLocaleDateString() : ""} ${calendarTasks.find((calTask) => calTask.id === task.id)?.startTime ? `at ${formatTime(calendarTasks.find((calTask) => calTask.id === task.id)?.startTime || "")}` : ""}`}
-                          >
-                            <CalendarIcon className="h-3 w-3 text-blue-500" />
-                          </button>
-                        )}
-                        <label
-                          htmlFor={task.id}
-                          className={`text-sm ${task.completed ? "line-through text-gray-400 dark:text-gray-500" : "text-foreground"}`}
-                        >
-                          {task.title}
-                        </label>
-                      </div>
-                    </div>
-                    <div
-                      className={`flex items-center self-stretch cursor-grab p-1 rounded-md ${isDragging ? "bg-primary/20" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
-                      title="Drag to calendar or reorder"
-                    >
-                      <GripVertical
-                        className={`h-4 w-4 ${isDragging ? "text-primary" : "text-gray-400 dark:text-gray-500"} flex-shrink-0 transition-colors duration-200`}
-                      />
-                    </div>
-                  </div>
+                  <TaskItem 
+                    key={taskKey}
+                    task={task}
+                    taskIndex={taskIndex}
+                    assignmentId={id}
+                    assignmentTitle={title}
+                    calendarTasks={calendarTasks}
+                    onTaskToggle={onTaskToggle}
+                  />
                 );
               })}
             </div>
@@ -426,5 +255,127 @@ const AssignmentCard = ({
     </Card>
   );
 };
+
+// Extract TaskItem as a separate component to ensure proper drag initialization
+const TaskItem = React.memo(({ 
+  task, 
+  taskIndex, 
+  assignmentId, 
+  assignmentTitle,
+  calendarTasks,
+  onTaskToggle
+}: { 
+  task: Task; 
+  taskIndex: number; 
+  assignmentId: string;
+  assignmentTitle: string;
+  calendarTasks: CalendarTask[];
+  onTaskToggle: (taskId: string) => void;
+}) => {
+  // Create a ref for the task element
+  const taskElementRef = React.useRef<HTMLDivElement>(null);
+  
+  // Safely use useDrag only if we're in a DndProvider context
+  let dragRef: any = null;
+  let isDragging = false;
+
+  // Wrap useDrag in a try-catch to handle cases where DndProvider context is missing
+  try {
+    // For dragging to calendar
+    const [dragResult, drag] = useDrag(
+      () => ({
+        type: "task",
+        item: {
+          ...task,
+          assignmentId,
+          assignmentTitle,
+          id: task.id,
+          title: task.title,
+          completed: task.completed,
+          index: taskIndex,
+        },
+        canDrag: true,
+        collect: (monitor) => ({
+          isDragging: !!monitor.isDragging(),
+        }),
+      }),
+      [task.id, task.title, task.completed, assignmentId, assignmentTitle, taskIndex],
+    );
+
+    dragRef = drag;
+    isDragging = dragResult.isDragging;
+  } catch (error) {
+    console.log("DnD not available in this context", error);
+    dragRef = null;
+    isDragging = false;
+  }
+  
+  // Apply the drag ref to the task element when it's available
+  React.useEffect(() => {
+    if (dragRef && taskElementRef.current) {
+      dragRef(taskElementRef.current);
+    }
+  }, [dragRef, task.id]);
+
+  return (
+    <div
+      ref={taskElementRef}
+      data-task-id={task.id}
+      className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50" : ""}`}
+      style={{
+        cursor: calendarTasks.some(
+          (calTask) => calTask.id === task.id,
+        )
+          ? "default"
+          : "grab",
+      }}
+    >
+      <div className="flex items-center space-x-2 flex-grow">
+        <Checkbox
+          id={task.id}
+          data-task-id={task.id}
+          checked={task.completed}
+          onCheckedChange={() => onTaskToggle(task.id)}
+        />
+        <div className="flex items-center flex-grow">
+          {calendarTasks.some(
+            (calTask) => calTask.id === task.id,
+          ) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                window.dispatchEvent(
+                  new CustomEvent("focus-calendar-task", {
+                    detail: { taskId: task.id },
+                  }),
+                );
+              }}
+              className="mr-1 text-primary hover:text-primary/80"
+              title="View in calendar"
+            >
+              <CalendarIcon className="h-3 w-3" />
+            </button>
+          )}
+          <label
+            htmlFor={task.id}
+            className={`text-sm flex-grow ${task.completed ? "line-through text-gray-500 dark:text-gray-400" : ""}`}
+          >
+            {task.title}
+          </label>
+        </div>
+      </div>
+      <div
+        className="flex items-center self-stretch cursor-grab p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+        title="Drag to calendar or reorder"
+      >
+        <GripVertical
+          className="h-4 w-4 text-gray-500 dark:text-gray-400"
+          data-task-id={task.id}
+        />
+      </div>
+    </div>
+  );
+});
 
 export default AssignmentCard;

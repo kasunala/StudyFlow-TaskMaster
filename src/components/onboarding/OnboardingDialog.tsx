@@ -15,6 +15,7 @@ import { Calendar, GripVertical, Clock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { useAssignments } from "@/contexts/AssignmentContext";
+import TimeSelectionDialog from "@/components/dashboard/TimeSelectionDialog";
 
 interface OnboardingDialogProps {
   open: boolean;
@@ -44,6 +45,8 @@ const OnboardingDialog = ({
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
   const [isFirstAssignment, setIsFirstAssignment] = useState(true);
+  const [timeSelectionOpen, setTimeSelectionOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Check if this is the first assignment
   useEffect(() => {
@@ -136,191 +139,202 @@ const OnboardingDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Welcome to TaskMaster!</DialogTitle>
-          <DialogDescription>
-            {isFirstAssignment
-              ? "Let's create your first assignment to get started."
-              : "Create a new assignment"}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Welcome to TaskMaster!</DialogTitle>
+            <DialogDescription>
+              {isFirstAssignment
+                ? "Let's create your first assignment to get started."
+                : "Create a new assignment"}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="title">Assignment Title</Label>
-            <Input
-              id="title"
-              placeholder="Math Homework"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Complete exercises 1-10"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="dueDate">Due Date</Label>
-            <div className="flex">
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Assignment Title</Label>
               <Input
-                id="dueDate"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="flex-1"
+                id="title"
+                placeholder="Math Homework"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
               />
-              <Button
-                variant="outline"
-                size="icon"
-                className="ml-2"
-                type="button"
-                onClick={() => {
-                  // Create a date picker element
-                  const datePicker = document.createElement("input");
-                  datePicker.type = "date";
-                  datePicker.style.display = "none";
-                  document.body.appendChild(datePicker);
+            </div>
 
-                  // Set initial value if available
-                  if (dueDate) {
-                    datePicker.value = dueDate;
-                  }
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Complete exercises 1-10"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
 
-                  // Handle date selection
-                  datePicker.addEventListener("change", (e) => {
-                    setDueDate(datePicker.value);
-                    document.body.removeChild(datePicker);
-                  });
+            <div className="grid gap-2">
+              <Label htmlFor="dueDate">Due Date</Label>
+              <div className="flex">
+                <Input
+                  id="dueDate"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="ml-2"
+                  type="button"
+                  onClick={() => {
+                    // Create a date picker element
+                    const datePicker = document.createElement("input");
+                    datePicker.type = "date";
+                    datePicker.style.display = "none";
+                    document.body.appendChild(datePicker);
 
-                  // Open the date picker
-                  datePicker.click();
-
-                  // Clean up if dialog is closed without selecting
-                  datePicker.addEventListener("blur", () => {
-                    if (document.body.contains(datePicker)) {
-                      document.body.removeChild(datePicker);
+                    // Set initial value if available
+                    if (dueDate) {
+                      datePicker.value = dueDate;
                     }
-                  });
-                }}
-              >
-                <Calendar className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
 
-          <div className="grid gap-2">
-            <Label>Tasks</Label>
-            <div className="space-y-2">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex flex-col p-2 border rounded-md"
+                    // Handle date selection
+                    datePicker.addEventListener("change", (e) => {
+                      setDueDate(datePicker.value);
+                      document.body.removeChild(datePicker);
+                    });
+
+                    // Open the date picker
+                    datePicker.click();
+
+                    // Clean up if dialog is closed without selecting
+                    datePicker.addEventListener("blur", () => {
+                      if (document.body.contains(datePicker)) {
+                        document.body.removeChild(datePicker);
+                      }
+                    });
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <GripVertical className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
-                      <div className="flex items-center space-x-2">
-                        <Checkbox id={`task-${task.id}`} />
-                        <Label
-                          htmlFor={`task-${task.id}`}
-                          className="cursor-pointer"
-                        >
-                          {task.title}
-                        </Label>
-                      </div>
-                    </div>
-                    {task.title !== "Warm-up task" && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveTask(task.id)}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="mt-2 pl-6 flex items-center space-x-2">
-                    <Clock className="h-4 w-4 text-gray-400" />
-                    <div className="flex-1">
-                      <Slider
-                        value={[task.duration || 30]}
-                        min={15}
-                        max={240}
-                        step={15}
-                        onValueChange={(value) => {
-                          const updatedTasks = tasks.map((t) => {
-                            if (t.id === task.id) {
-                              return { ...t, duration: value[0] };
-                            }
-                            return t;
-                          });
-                          setTasks(updatedTasks);
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs text-gray-500 w-12">
-                      {task.duration || 30} min
-                    </span>
-                  </div>
-                </div>
-              ))}
+                  <Calendar className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
-            <div className="flex mt-2">
-              <Input
-                placeholder="Add a new task"
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                className="flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddTask();
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="ml-2"
-                onClick={handleAddTask}
-              >
-                Add
-              </Button>
+            <div className="grid gap-2">
+              <Label>Tasks</Label>
+              <div className="space-y-2">
+                {tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex flex-col p-2 border rounded-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox id={`task-${task.id}`} />
+                          <Label
+                            htmlFor={`task-${task.id}`}
+                            className="cursor-pointer"
+                          >
+                            {task.title}
+                          </Label>
+                        </div>
+                      </div>
+                      {task.title !== "Warm-up task" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveTask(task.id)}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="mt-2 pl-6 flex items-center space-x-2">
+                      <Clock className="h-4 w-4 text-gray-400" />
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1 text-xs justify-start"
+                        onClick={() => {
+                          setSelectedTaskId(task.id);
+                          setTimeSelectionOpen(true);
+                        }}
+                      >
+                        Duration: {task.duration || 30} minutes
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex mt-2">
+                <Input
+                  placeholder="Add a new task"
+                  value={newTask}
+                  onChange={(e) => setNewTask(e.target.value)}
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddTask();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="ml-2"
+                  onClick={handleAddTask}
+                >
+                  Add
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            onClick={async (e) => {
-              e.preventDefault();
-              console.log("Create Assignment button clicked");
-              try {
-                await handleSubmit();
-                console.log("Assignment created successfully");
-              } catch (error) {
-                console.error("Error creating assignment:", error);
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={async (e) => {
+                e.preventDefault();
+                console.log("Create Assignment button clicked");
+                try {
+                  await handleSubmit();
+                  console.log("Assignment created successfully");
+                } catch (error) {
+                  console.error("Error creating assignment:", error);
+                }
+              }}
+              disabled={!title || !dueDate}
+            >
+              Create Assignment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Time Selection Dialog */}
+      {selectedTaskId && (
+        <TimeSelectionDialog
+          open={timeSelectionOpen}
+          onOpenChange={setTimeSelectionOpen}
+          initialDuration={tasks.find(t => t.id === selectedTaskId)?.duration || 30}
+          taskTitle={tasks.find(t => t.id === selectedTaskId)?.title || ""}
+          onSave={(duration) => {
+            const updatedTasks = tasks.map((t) => {
+              if (t.id === selectedTaskId) {
+                return { ...t, duration };
               }
-            }}
-            disabled={!title || !dueDate}
-          >
-            Create Assignment
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              return t;
+            });
+            setTasks(updatedTasks);
+          }}
+        />
+      )}
+    </>
   );
 };
 

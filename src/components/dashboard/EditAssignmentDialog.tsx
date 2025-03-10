@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,9 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, X, GripVertical, Trash2, Clock } from "lucide-react";
+import { Calendar, Clock, GripVertical, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
+import TimeSelectionDialog from "./TimeSelectionDialog";
 
 interface Task {
   id: string;
@@ -47,11 +48,12 @@ const EditAssignmentDialog = ({
   const [description, setDescription] = useState(assignment.description);
   const [dueDate, setDueDate] = useState(assignment.dueDate);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [timeSelectionOpen, setTimeSelectionOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Initialize tasks when the dialog opens
   React.useEffect(() => {
     if (open) {
-      console.log("Setting tasks from assignment:", assignment.tasks);
       setTasks([...assignment.tasks]);
       setTitle(assignment.title);
       setDescription(assignment.description);
@@ -68,46 +70,30 @@ const EditAssignmentDialog = ({
 
   const handleAddTask = () => {
     if (newTask.trim()) {
-      // Create a new task with a unique ID and default duration of 30 minutes
-      const newTaskId = `task-${Date.now()}`;
-      const updatedTasks = [
-        ...tasks,
-        { id: newTaskId, title: newTask, completed: false, duration: 30 },
-      ];
-      setTasks(updatedTasks);
-      setNewTask("");
+      try {
+        // Create a new task with a unique ID and default duration of 30 minutes
+        const newTaskId = `task-${Date.now()}`;
+        const updatedTasks = [
+          ...tasks,
+          { id: newTaskId, title: newTask, completed: false, duration: 30 },
+        ];
+        setTasks(updatedTasks);
+        setNewTask("");
 
-      // Immediately update the parent component to refresh the assignment card
-      if (title && dueDate) {
-        // Save first to ensure the task is added to the assignment
-        onSave({
-          id: assignment.id,
-          title,
-          description,
-          dueDate,
-          tasks: updatedTasks,
-        });
+        // Immediately update the parent component to refresh the assignment card
+        if (title && dueDate) {
+          // Save first to ensure the task is added to the assignment
+          onSave({
+            id: assignment.id,
+            title,
+            description,
+            dueDate,
+            tasks: updatedTasks,
+          });
 
-        // Use requestAnimationFrame to ensure DOM is updated before dispatching events
-        requestAnimationFrame(() => {
-          // Dispatch a custom event to notify that a new task was added
-          window.dispatchEvent(
-            new CustomEvent("task-added", {
-              detail: {
-                taskId: newTaskId,
-                assignmentId: assignment.id,
-                index: updatedTasks.length - 1,
-              },
-            })
-          );
-
-          // Force re-initialization of drag handlers
-          window.dispatchEvent(new Event("dragHandlersUpdate"));
-
-          // Use fewer, more strategic timeouts
-          [50, 150].forEach(delay => {
-            setTimeout(() => {
-              window.dispatchEvent(new Event("dragHandlersUpdate"));
+          // Dispatch the task-added event after a short delay to allow the DOM to update
+          setTimeout(() => {
+            try {
               window.dispatchEvent(
                 new CustomEvent("task-added", {
                   detail: {
@@ -117,9 +103,13 @@ const EditAssignmentDialog = ({
                   },
                 })
               );
-            }, delay);
-          });
-        });
+            } catch (error) {
+              console.error("Error dispatching task-added event:", error);
+            }
+          }, 50);
+        }
+      } catch (error) {
+        console.error("Error adding task:", error);
       }
     }
   };
@@ -142,8 +132,6 @@ const EditAssignmentDialog = ({
   const handleSubmit = () => {
     if (!title || !dueDate) return;
 
-    console.log("Saving assignment with tasks:", tasks);
-
     // Save the assignment
     onSave({
       id: assignment.id,
@@ -162,214 +150,225 @@ const EditAssignmentDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Edit Assignment</DialogTitle>
-          <DialogDescription>
-            Update your assignment details and tasks.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Assignment</DialogTitle>
+            <DialogDescription>
+              Update your assignment details and tasks.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="title">Assignment Title</Label>
-            <Input
-              id="title"
-              placeholder="Math Homework"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Complete exercises 1-10"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="dueDate">Due Date</Label>
-            <div className="flex">
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Assignment Title</Label>
               <Input
-                id="dueDate"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="flex-1"
+                id="title"
+                placeholder="Math Homework"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
               />
-              <Button
-                variant="outline"
-                size="icon"
-                className="ml-2"
-                type="button"
-                onClick={() => {
-                  // Create a date picker element
-                  const datePicker = document.createElement("input");
-                  datePicker.type = "date";
-                  datePicker.style.display = "none";
-                  document.body.appendChild(datePicker);
+            </div>
 
-                  // Set initial value if available
-                  if (dueDate) {
-                    datePicker.value = dueDate;
-                  }
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Complete exercises 1-10"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
 
-                  // Handle date selection
-                  datePicker.addEventListener("change", (e) => {
-                    setDueDate(datePicker.value);
-                    document.body.removeChild(datePicker);
-                  });
+            <div className="grid gap-2">
+              <Label htmlFor="dueDate">Due Date</Label>
+              <div className="flex">
+                <Input
+                  id="dueDate"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="ml-2"
+                  type="button"
+                  onClick={() => {
+                    // Create a date picker element
+                    const datePicker = document.createElement("input");
+                    datePicker.type = "date";
+                    datePicker.style.display = "none";
+                    document.body.appendChild(datePicker);
 
-                  // Open the date picker
-                  datePicker.click();
-
-                  // Clean up if dialog is closed without selecting
-                  datePicker.addEventListener("blur", () => {
-                    if (document.body.contains(datePicker)) {
-                      document.body.removeChild(datePicker);
+                    // Set initial value if available
+                    if (dueDate) {
+                      datePicker.value = dueDate;
                     }
-                  });
-                }}
-              >
-                <Calendar className="h-4 w-4" />
-              </Button>
+
+                    // Handle date selection
+                    datePicker.addEventListener("change", (e) => {
+                      setDueDate(datePicker.value);
+                      document.body.removeChild(datePicker);
+                    });
+
+                    // Open the date picker
+                    datePicker.click();
+
+                    // Clean up if dialog is closed without selecting
+                    datePicker.addEventListener("blur", () => {
+                      if (document.body.contains(datePicker)) {
+                        document.body.removeChild(datePicker);
+                      }
+                    });
+                  }}
+                >
+                  <Calendar className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Tasks</Label>
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {tasks.length > 0 ? (
+                  tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex flex-col p-2 border rounded-md"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`task-${task.id}`}
+                              checked={task.completed}
+                              onCheckedChange={() => handleToggleTask(task.id)}
+                            />
+                            <Label
+                              htmlFor={`task-${task.id}`}
+                              className={`cursor-pointer ${task.completed ? "line-through text-gray-400" : ""}`}
+                            >
+                              {task.title}
+                            </Label>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-gray-500 hover:text-red-500"
+                          onClick={() => handleRemoveTask(task.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="mt-2 pl-6 flex items-center space-x-2">
+                        <Clock className="h-4 w-4 text-gray-400" />
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1 text-xs justify-start"
+                          onClick={() => {
+                            setSelectedTaskId(task.id);
+                            setTimeSelectionOpen(true);
+                          }}
+                        >
+                          Duration: {task.duration || 30} minutes
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-2 text-gray-500">
+                    No tasks yet. Add your first task below.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex mt-2">
+                <Input
+                  placeholder="Add a new task"
+                  value={newTask}
+                  onChange={(e) => setNewTask(e.target.value)}
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddTask();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="ml-2"
+                  onClick={handleAddTask}
+                >
+                  Add
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Tasks</Label>
-            <div className="space-y-2 max-h-[200px] overflow-y-auto">
-              {tasks.length > 0 ? (
-                tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex flex-col p-2 border rounded-md"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <GripVertical className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`task-${task.id}`}
-                            checked={task.completed}
-                            onCheckedChange={() => handleToggleTask(task.id)}
-                          />
-                          <Label
-                            htmlFor={`task-${task.id}`}
-                            className={`cursor-pointer ${task.completed ? "line-through text-gray-400" : ""}`}
-                          >
-                            {task.title}
-                          </Label>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-gray-500 hover:text-red-500"
-                        onClick={() => handleRemoveTask(task.id)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <div className="mt-2 pl-6 flex items-center space-x-2">
-                      <Clock className="h-4 w-4 text-gray-400" />
-                      <div className="flex-1">
-                        <Slider
-                          value={[task.duration || 30]}
-                          min={15}
-                          max={240}
-                          step={15}
-                          onValueChange={(value) => {
-                            const updatedTasks = tasks.map((t) => {
-                              if (t.id === task.id) {
-                                return { ...t, duration: value[0] };
-                              }
-                              return t;
-                            });
-                            setTasks(updatedTasks);
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500 w-12">
-                        {task.duration || 30} min
-                      </span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-2 text-gray-500">
-                  No tasks yet. Add your first task below.
-                </div>
-              )}
-            </div>
-
-            <div className="flex mt-2">
-              <Input
-                placeholder="Add a new task"
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                className="flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddTask();
-                  }
-                }}
-              />
+          <DialogFooter className="flex justify-between">
+            <div className="flex-1 flex justify-start">
               <Button
                 type="button"
-                variant="outline"
-                className="ml-2"
-                onClick={handleAddTask}
+                variant="destructive"
+                onClick={() => {
+                  if (
+                    confirm(
+                      "Are you sure you want to delete this assignment? This action cannot be undone.",
+                    )
+                  ) {
+                    onOpenChange(false);
+                    onSave({
+                      id: assignment.id,
+                      title: "",
+                      description: "",
+                      dueDate: "",
+                      tasks: [],
+                    });
+                  }
+                }}
               >
-                Add
+                <X className="h-4 w-4 mr-2" />
+                Delete
               </Button>
             </div>
-          </div>
-        </div>
-
-        <DialogFooter className="flex justify-between">
-          <div className="flex-1 flex justify-start">
             <Button
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                if (
-                  confirm(
-                    "Are you sure you want to delete this assignment? This action cannot be undone.",
-                  )
-                ) {
-                  onOpenChange(false);
-                  onSave({
-                    id: assignment.id,
-                    title: "",
-                    description: "",
-                    dueDate: "",
-                    tasks: [],
-                  });
-                }
-              }}
+              type="submit"
+              onClick={handleSubmit}
+              disabled={!title || !dueDate}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
+              Save Changes
             </Button>
-          </div>
-          <Button
-            type="submit"
-            onClick={handleSubmit}
-            disabled={!title || !dueDate}
-          >
-            Save Changes
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Time Selection Dialog */}
+      {selectedTaskId && (
+        <TimeSelectionDialog
+          open={timeSelectionOpen}
+          onOpenChange={setTimeSelectionOpen}
+          initialDuration={tasks.find(t => t.id === selectedTaskId)?.duration || 30}
+          taskTitle={tasks.find(t => t.id === selectedTaskId)?.title || ""}
+          onSave={(duration) => {
+            const updatedTasks = tasks.map((t) => {
+              if (t.id === selectedTaskId) {
+                return { ...t, duration };
+              }
+              return t;
+            });
+            setTasks(updatedTasks);
+          }}
+        />
+      )}
+    </>
   );
 };
 

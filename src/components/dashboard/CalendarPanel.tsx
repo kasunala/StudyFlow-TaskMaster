@@ -161,7 +161,7 @@ const CalendarPanel = ({
       const timeIndicator = document.querySelector(".current-time-indicator");
       if (timeIndicator) {
         timeIndicator.classList.remove("current-time-indicator");
-        void timeIndicator.offsetHeight;
+        void (timeIndicator as HTMLElement).offsetHeight;
         timeIndicator.classList.add("current-time-indicator");
       }
     };
@@ -241,8 +241,9 @@ const CalendarPanel = ({
           console.log("Task element found:", taskElement);
 
           if (taskElement) {
-            // Force a reflow
-            void taskElement.offsetHeight;
+            // Force a reflow without using offsetHeight
+            // This is a no-op that forces layout recalculation
+            window.getComputedStyle(taskElement).getPropertyValue('opacity');
 
             // Add highlight class
             taskElement.classList.add("highlight-task");
@@ -270,8 +271,9 @@ const CalendarPanel = ({
               console.log("Retry task element found:", retryTaskElement);
 
               if (retryTaskElement) {
-                // Force a reflow
-                void retryTaskElement.offsetHeight;
+                // Force a reflow without using offsetHeight
+                // This is a no-op that forces layout recalculation
+                window.getComputedStyle(retryTaskElement).getPropertyValue('opacity');
 
                 // Add highlight class
                 retryTaskElement.classList.add("highlight-task");
@@ -325,6 +327,33 @@ const CalendarPanel = ({
     };
   }, []);
 
+  // Listen for calendar-task-overlap events
+  useEffect(() => {
+    const handleCalendarTaskOverlap = (event: any) => {
+      console.log("Calendar task overlap event received", event.detail);
+      const { taskId, message } = event.detail;
+      
+      // Show a notification to the user
+      // This could be replaced with a proper toast notification system
+      alert(`Cannot schedule task: ${message}. Please choose a different time slot.`);
+      
+      // Highlight the task that couldn't be scheduled if it exists
+      const taskElement = document.getElementById(`calendar-task-${taskId}`);
+      if (taskElement) {
+        taskElement.classList.add("overlap-error");
+        setTimeout(() => {
+          taskElement.classList.remove("overlap-error");
+        }, 3000);
+      }
+    };
+
+    window.addEventListener("calendar-task-overlap", handleCalendarTaskOverlap);
+
+    return () => {
+      window.removeEventListener("calendar-task-overlap", handleCalendarTaskOverlap);
+    };
+  }, []);
+
   // Filter tasks for the selected date
   const filteredTasks = calendarTasks.filter((task) => {
     // If task has no date, assign it today's date for the demo using local timezone
@@ -361,26 +390,76 @@ const CalendarPanel = ({
     // Start with the given time
     let [hour, minute] = startTime.split(":").map(Number);
     let currentMinutes = hour * 60 + minute;
-
-    // Try each possible time slot in 30-minute increments
-    while (currentMinutes < 23 * 60) {
-      // Until 11:00 PM
-      const currentTimeString = `${Math.floor(currentMinutes / 60)
-        .toString()
-        .padStart(
-          2,
-          "0",
-        )}:${(currentMinutes % 60).toString().padStart(2, "0")}`;
-
-      if (!checkForOverlap(currentTimeString, duration)) {
-        return currentTimeString;
-      }
-
-      // Move to next 30-minute slot
-      currentMinutes += 30;
+    
+    // Get all existing tasks for the day and sort them by start time
+    const sortedTasks = [...filteredTasks]
+      .filter(task => task.startTime)
+      .sort((a, b) => {
+        const aStart = a.startTime ? timeToMinutes(a.startTime) : 0;
+        const bStart = b.startTime ? timeToMinutes(b.startTime) : 0;
+        return aStart - bStart;
+      });
+    
+    // Helper function to convert time string to minutes
+    function timeToMinutes(time: string): number {
+      const [h, m] = time.split(":").map(Number);
+      return h * 60 + m;
     }
-
-    // If no slot is found, return the original time (this should be rare)
+    
+    // Helper function to convert minutes to time string
+    function minutesToTime(minutes: number): string {
+      const h = Math.floor(minutes / 60) % 24;
+      const m = minutes % 60;
+      return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+    }
+    
+    // First, try the original time slot
+    if (!checkForOverlap(startTime, duration)) {
+      return startTime;
+    }
+    
+    // If there's an overlap, find gaps between existing tasks
+    let lastEndTime = 8 * 60; // Start at 8:00 AM
+    const endOfDay = 23 * 60; // End at 11:00 PM
+    
+    // Add a dummy task at the end of the day
+    sortedTasks.push({
+      id: "end-of-day",
+      title: "End of Day",
+      completed: false,
+      assignmentId: "",
+      assignmentTitle: "",
+      startTime: "23:00",
+      duration: 60,
+    } as CalendarTask);
+    
+    for (const task of sortedTasks) {
+      if (!task.startTime) continue;
+      
+      const taskStart = timeToMinutes(task.startTime);
+      
+      // If there's a gap before this task that can fit our duration
+      if (taskStart - lastEndTime >= duration) {
+        // Check if our task would fit in this gap
+        const potentialStart = minutesToTime(lastEndTime);
+        if (!checkForOverlap(potentialStart, duration)) {
+          return potentialStart;
+        }
+      }
+      
+      // Update lastEndTime to the end of the current task
+      lastEndTime = taskStart + (task.duration || 30);
+    }
+    
+    // If we couldn't find a gap, try after the last task
+    if (lastEndTime < endOfDay - duration) {
+      const potentialStart = minutesToTime(lastEndTime);
+      if (!checkForOverlap(potentialStart, duration)) {
+        return potentialStart;
+      }
+    }
+    
+    // If all else fails, return the original time (this should be rare)
     return startTime;
   };
 
@@ -1171,9 +1250,8 @@ const CalendarPanel = ({
           </div>
         ) : (
           <ScrollArea
-            className="h-[500px] pr-4 overflow-visible"
-            scrollHideDelay={0}
-            orientation="both"
+            className="h-[500px]"
+            scrollHideDelay={400}
           >
             <div
               className="relative border-l border-gray-200 dark:border-gray-700 ml-[60px] bg-white dark:bg-gray-900"

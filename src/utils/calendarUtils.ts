@@ -30,12 +30,8 @@ export const checkTimeOverlap = (
   for (const task of tasksForDay) {
     if (!task.startTime) continue;
 
-    // If we're adding a regular task, we should check against blocked times
-    // If we're adding a blocked time, we should check against all tasks
-    if (!isBlockedTime && !task.isBlockedTime) {
-      // If neither the new task nor the existing task is a blocked time, we allow overlap
-      continue;
-    }
+    // Remove the condition that allows regular tasks to overlap with each other
+    // Now all tasks will be checked for overlap regardless of their type
 
     const [taskStartHour, taskStartMinute] = task.startTime
       .split(":")

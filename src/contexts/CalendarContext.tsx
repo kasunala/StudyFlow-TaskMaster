@@ -119,7 +119,7 @@ export const CalendarProvider = ({
       // Get tasks for the same date
       const tasksForDate = calendarTasks.filter(t => t.date === task.date);
       
-      // Check for overlaps with blocked times or if this is a blocked time, check for overlaps with all tasks
+      // Check for overlaps with all existing tasks
       if (task.startTime && task.duration) {
         const hasOverlap = checkTimeOverlap(
           task.startTime,
@@ -130,7 +130,11 @@ export const CalendarProvider = ({
         );
         
         if (hasOverlap) {
-          console.log("Task overlaps with blocked times or other tasks, cannot add");
+          console.log("Task overlaps with existing tasks, cannot add");
+          // Dispatch an event to notify components that there was an overlap
+          window.dispatchEvent(new CustomEvent('calendar-task-overlap', {
+            detail: { taskId: task.id, message: "Task overlaps with existing tasks" }
+          }));
           return;
         }
       }
@@ -228,7 +232,7 @@ export const CalendarProvider = ({
       // Get tasks for the same date
       const tasksForDate = calendarTasks.filter(t => t.date === taskToUpdate.date);
       
-      // Check for overlaps with blocked times or if this is a blocked time, check for overlaps with all tasks
+      // Check for overlaps with all existing tasks
       const hasOverlap = checkTimeOverlap(
         startTime,
         calculatedDuration,
@@ -238,7 +242,11 @@ export const CalendarProvider = ({
       );
       
       if (hasOverlap) {
-        console.log("Task would overlap with blocked times or other tasks, cannot update");
+        console.log("Task would overlap with existing tasks, cannot update");
+        // Dispatch an event to notify components that there was an overlap
+        window.dispatchEvent(new CustomEvent('calendar-task-overlap', {
+          detail: { taskId: taskId, message: "Task would overlap with existing tasks" }
+        }));
         return;
       }
 
