@@ -1229,17 +1229,6 @@ const CalendarPanel = ({
                           </Badge>
                         )}
                       </div>
-                      {tasksForDay.length > 0 && (
-                        <div className="mt-1 text-xs truncate">
-                          {tasksForDay[0].title}
-                          {tasksForDay.length > 1 && (
-                            <span className="text-gray-500">
-                              {" "}
-                              +{tasksForDay.length - 1} more
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>,
                   );
                 }
