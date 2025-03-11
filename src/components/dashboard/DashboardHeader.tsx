@@ -61,7 +61,7 @@ const DashboardHeader = ({
     <header className="w-full h-[72px] px-6 bg-background border-b border-border flex items-center justify-between">
       {/* Logo */}
       <div className="flex items-center">
-        <h1 className="text-2xl font-bold text-primary">TaskMaster</h1>
+        <h1 className="text-2xl font-bold text-primary">AssignmentDays</h1>
       </div>
 
       {/* Right side controls */}
