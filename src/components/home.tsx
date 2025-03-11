@@ -398,22 +398,24 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
   // Make sure we have the DndProvider at the top level
   let content = (
-    <DndProvider backend={HTML5Backend} options={{ enableMouseEvents: true, enableTouchEvents: true }}>
-      <div
-        className={`min-h-screen bg-background ${theme === "dark" ? "dark" : ""}`}
-      >
+    <DndProvider backend={HTML5Backend}>
+      <div className={`min-h-screen bg-background ${theme}`}>
         <DashboardHeader
-          userEmail={userEmail}
-          userImage={userImage}
+          userEmail={currentUser?.email || ""}
+          userImage={
+            currentUser?.photoURL ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.email}`
+          }
           isFreeTier={userTier === "free"}
           notificationCount={notifications.filter((n) => !n.isRead).length}
+          showNotifications={showNotifications}
+          showCalendar={showCalendar}
+          isDarkMode={theme === "dark"}
           onUpgradeClick={handleUpgradeClick}
           onLogout={handleLogout}
+          onSettingsClick={() => {}}
           onNotificationClick={toggleNotifications}
           onCalendarClick={toggleCalendar}
-          showCalendar={showCalendar}
-          showNotifications={showNotifications}
-          isDarkMode={theme === "dark"}
           onThemeToggle={toggleTheme}
         />
 

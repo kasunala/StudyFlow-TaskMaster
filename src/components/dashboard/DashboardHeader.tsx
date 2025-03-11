@@ -18,6 +18,7 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface DashboardHeaderProps {
   userEmail?: string;
@@ -50,6 +51,12 @@ const DashboardHeader = ({
   onCalendarClick = () => {},
   onThemeToggle = () => {},
 }: DashboardHeaderProps) => {
+  const navigate = useNavigate();
+
+  const handleProfileClick = () => {
+    navigate("/profile");
+  };
+
   return (
     <header className="w-full h-[72px] px-6 bg-background border-b border-border flex items-center justify-between">
       {/* Logo */}
@@ -120,7 +127,7 @@ const DashboardHeader = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onClick={onSettingsClick}>
+            <DropdownMenuItem onClick={handleProfileClick}>
               <User className="mr-2 h-4 w-4" />
               <span>Profile</span>
             </DropdownMenuItem>

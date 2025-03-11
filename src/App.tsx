@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { useRoutes, Routes, Route, Navigate } from "react-router-dom";
 import Home from "./components/home";
 import Login from "./components/auth/Login";
+import ProfilePage from "./components/profile/ProfilePage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AssignmentProvider } from "./contexts/AssignmentContext";
 import { CalendarProvider } from "./contexts/CalendarContext";
@@ -37,6 +38,14 @@ function AppRoutes() {
             element={
               <PrivateRoute>
                 <Home />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <PrivateRoute>
+                <ProfilePage />
               </PrivateRoute>
             }
           />
