@@ -29,6 +29,7 @@ interface Assignment {
   description: string;
   dueDate: string;
   tasks: Task[];
+  _delete?: boolean;
 }
 
 interface EditAssignmentDialogProps {
@@ -331,6 +332,7 @@ const EditAssignmentDialog = ({
                       description: "",
                       dueDate: "",
                       tasks: [],
+                      _delete: true,
                     });
                   }
                 }}
