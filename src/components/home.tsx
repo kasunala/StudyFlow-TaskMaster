@@ -133,7 +133,29 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
   const handleAddCalendarTask = async (task: CalendarTask) => {
     console.log("handleAddCalendarTask called with:", task);
-    await addCalendarTask(task);
+    
+    // Ensure the task has all required properties
+    const completeTask: CalendarTask = {
+      ...task,
+      id: task.id || `task-${Date.now()}`,
+      assignmentId: task.assignmentId || "",
+      assignmentTitle: task.assignmentTitle || "",
+      title: task.title || "Untitled Task",
+      completed: task.completed || false,
+      startTime: task.startTime || "08:00",
+      duration: task.duration || 30,
+      date: task.date || new Date().toISOString().split('T')[0],
+    };
+    
+    console.log("Adding complete task to calendar:", completeTask);
+    await addCalendarTask(completeTask);
+    
+    // Dispatch an event to notify that a task has been added
+    window.dispatchEvent(
+      new CustomEvent("task-added", {
+        detail: { taskId: completeTask.id, assignmentId: completeTask.assignmentId },
+      })
+    );
   };
 
   const handleRemoveCalendarTask = (taskId: string) => {
@@ -232,6 +254,18 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
         setShowCalendar(true);
         setShowNotifications(false);
       }
+      
+      // Force a re-render of the calendar panel
+      const forceUpdate = new Event('resize');
+      window.dispatchEvent(forceUpdate);
+      
+      // Ensure the calendar panel is visible by scrolling to it
+      setTimeout(() => {
+        const calendarPanel = document.querySelector('.calendar-panel');
+        if (calendarPanel) {
+          calendarPanel.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
     };
 
     window.addEventListener("focus-calendar-task", handleFocusTask);
@@ -239,7 +273,63 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     return () => {
       window.removeEventListener("focus-calendar-task", handleFocusTask);
     };
-  }, [showCalendar]);
+  }, [showCalendar, setShowCalendar, setShowNotifications]);
+
+  // Listen for show-calendar-panel events
+  useEffect(() => {
+    const handleShowCalendarPanel = (event: any) => {
+      console.log(
+        "Home component received show-calendar-panel event",
+        event.detail,
+      );
+      // Make sure calendar is visible
+      if (event.detail.show && !showCalendar) {
+        console.log("Showing calendar panel from show-calendar-panel event");
+        setShowCalendar(true);
+        setShowNotifications(false);
+        
+        // Force a re-render of the calendar panel
+        const forceUpdate = new Event('resize');
+        window.dispatchEvent(forceUpdate);
+        
+        // Ensure the calendar panel is visible by scrolling to it
+        setTimeout(() => {
+          const calendarPanel = document.querySelector('.calendar-panel');
+          if (calendarPanel) {
+            calendarPanel.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 100);
+      }
+    };
+
+    window.addEventListener("show-calendar-panel", handleShowCalendarPanel);
+
+    return () => {
+      window.removeEventListener("show-calendar-panel", handleShowCalendarPanel);
+    };
+  }, [showCalendar, setShowCalendar, setShowNotifications]);
+
+  // Listen for navigate-calendar-to-date events
+  useEffect(() => {
+    const handleNavigateToDate = (event: any) => {
+      console.log(
+        "Home component received navigate-calendar-to-date event",
+        event.detail,
+      );
+      // Make sure calendar is visible
+      if (!showCalendar) {
+        console.log("Showing calendar panel from navigate-calendar-to-date event");
+        setShowCalendar(true);
+        setShowNotifications(false);
+      }
+    };
+
+    window.addEventListener("navigate-calendar-to-date", handleNavigateToDate);
+
+    return () => {
+      window.removeEventListener("navigate-calendar-to-date", handleNavigateToDate);
+    };
+  }, [showCalendar, setShowCalendar, setShowNotifications]);
 
   const handleUpdateTaskTime = (
     taskId: string,
@@ -308,7 +398,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
   // Make sure we have the DndProvider at the top level
   let content = (
-    <DndProvider backend={HTML5Backend}>
+    <DndProvider backend={HTML5Backend} options={{ enableMouseEvents: true, enableTouchEvents: true }}>
       <div
         className={`min-h-screen bg-background ${theme === "dark" ? "dark" : ""}`}
       >

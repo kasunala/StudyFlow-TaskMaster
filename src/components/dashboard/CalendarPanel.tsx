@@ -208,99 +208,229 @@ const CalendarPanel = ({
 
   // Listen for focus-calendar-task events
   useEffect(() => {
+    console.log("Setting up focus-calendar-task event listener in CalendarPanel");
+    
     const handleFocusTask = (event: any) => {
-      console.log("Focus calendar task event received", event.detail);
-      const { taskId } = event.detail;
+      console.log("Focus calendar task event received in CalendarPanel", event.detail);
+      console.log("Current calendarTasks:", calendarTasks);
+      console.log("Current showMonthView:", showMonthView);
+      
+      const { taskId, date: eventDate, startTime: eventStartTime, assignmentId: eventAssignmentId } = event.detail;
 
       // Find the task in calendar tasks
       const task = calendarTasks.find((task) => task.id === taskId);
-      console.log("Found task:", task);
+      console.log("Found task in calendarTasks:", task);
 
-      if (task) {
-        // Set the selected date to the task's date
-        if (task.date) {
-          // Create a new Date object from the ISO string
-          const taskDate = new Date(task.date);
-          console.log("Setting calendar to date:", taskDate);
-
-          // Update the month and year state variables to match the task date
-          setSelectedMonth(taskDate.getMonth());
-          setSelectedYear(taskDate.getFullYear());
-          setInternalSelectedDate(taskDate);
-        }
-
-        // Make sure we're in day view
+      // Always switch to day view first
+      if (showMonthView) {
+        console.log("Switching from month view to day view");
         setShowMonthView(false);
+      }
 
-        // Use a longer delay to ensure the DOM has updated
+      // Set the date based on the task or event
+      let taskDate: Date;
+      let taskDateISO: string;
+      
+      if (task && task.date) {
+        // Use the task's date
+        taskDate = new Date(task.date);
+        taskDateISO = task.date;
+      } else if (eventDate) {
+        // Use the date from the event
+        taskDate = new Date(eventDate);
+        taskDateISO = eventDate;
+      } else {
+        // Default to today
+        taskDate = new Date();
+        taskDateISO = `${taskDate.getFullYear()}-${String(taskDate.getMonth() + 1).padStart(2, "0")}-${String(taskDate.getDate()).padStart(2, "0")}`;
+      }
+      
+      console.log("Setting calendar to date:", taskDate, "ISO:", taskDateISO);
+      
+      // Check if we need to change the date
+      const currentDateISO = `${effectiveSelectedDate.getFullYear()}-${String(effectiveSelectedDate.getMonth() + 1).padStart(2, "0")}-${String(effectiveSelectedDate.getDate()).padStart(2, "0")}`;
+      const dateChanged = currentDateISO !== taskDateISO;
+      
+      console.log("Current date:", currentDateISO, "Target date:", taskDateISO, "Date changed:", dateChanged);
+      
+      if (dateChanged) {
+        // Update the month and year state variables to match the task date
+        setSelectedMonth(taskDate.getMonth());
+        setSelectedYear(taskDate.getFullYear());
+        setInternalSelectedDate(taskDate);
+        
+        // Force a re-render to ensure the calendar updates with the new date
         setTimeout(() => {
-          // Try to find the task element
-          const taskElement = document.getElementById(
-            `calendar-task-${taskId}`,
-          );
-          console.log("Task element found:", taskElement);
-
-          if (taskElement) {
-            // Force a reflow without using offsetHeight
-            // This is a no-op that forces layout recalculation
-            window.getComputedStyle(taskElement).getPropertyValue('opacity');
-
+          // Dispatch an event to force a re-render
+          window.dispatchEvent(new Event('resize'));
+          
+          // After the re-render, try to find and highlight the task
+          setTimeout(() => {
+            findAndHighlightTask(taskId, eventAssignmentId);
+          }, 500);
+        }, 100);
+      } else {
+        // If the date hasn't changed, just find and highlight the task immediately
+        findAndHighlightTask(taskId, eventAssignmentId);
+      }
+    };
+    
+    // Helper function to find and highlight a task
+    const findAndHighlightTask = (taskId: string, assignmentId?: string) => {
+      console.log("Finding and highlighting task:", taskId);
+      
+      // Try to find the task element
+      const taskElement = document.getElementById(`calendar-task-${taskId}`);
+      console.log("Task element found:", taskElement);
+      
+      if (taskElement) {
+        // Force a reflow to ensure styles are applied correctly
+        void taskElement.offsetHeight;
+        
+        // Remove any existing highlight classes first
+        document.querySelectorAll('.highlight-task').forEach(el => {
+          el.classList.remove('highlight-task');
+        });
+        
+        // Add highlight class with a slight delay to ensure DOM is ready
+        setTimeout(() => {
+          // Add highlight class
+          taskElement.classList.add("highlight-task");
+          console.log("Added highlight class to element");
+          
+          // Force another reflow
+          void taskElement.offsetHeight;
+          
+          // Apply inline styles as a backup
+          taskElement.style.boxShadow = "0 0 15px 5px rgba(59, 130, 246, 0.8)";
+          taskElement.style.zIndex = "50";
+          taskElement.style.border = "3px solid #3b82f6";
+          taskElement.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+          
+          // Scroll the task into view
+          taskElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+          console.log("Scrolled element into view");
+          
+          // Remove highlight after 3 seconds
+          setTimeout(() => {
+            taskElement.classList.remove("highlight-task");
+            // Reset inline styles
+            taskElement.style.boxShadow = "";
+            taskElement.style.zIndex = "";
+            taskElement.style.border = "";
+            taskElement.style.backgroundColor = "";
+          }, 3000);
+        }, 50);
+      } else {
+        console.error("Task element not found in DOM for ID:", taskId);
+        
+        // List all calendar tasks in the DOM to help debug
+        const allCalendarTasks = document.querySelectorAll('[id^="calendar-task-"]');
+        console.log("All calendar tasks in DOM:", allCalendarTasks.length);
+        allCalendarTasks.forEach(el => console.log("Found element with ID:", el.id));
+        
+        // If element not found, try again with a longer delay
+        setTimeout(() => {
+          const retryTaskElement = document.getElementById(`calendar-task-${taskId}`);
+          console.log("Retry task element found:", retryTaskElement);
+          
+          if (retryTaskElement) {
+            // Force a reflow
+            void retryTaskElement.offsetHeight;
+            
+            // Remove any existing highlight classes first
+            document.querySelectorAll('.highlight-task').forEach(el => {
+              el.classList.remove('highlight-task');
+            });
+            
             // Add highlight class
-            taskElement.classList.add("highlight-task");
-            console.log("Added highlight class to element");
-
+            retryTaskElement.classList.add("highlight-task");
+            console.log("Added highlight class to element (retry)");
+            
+            // Force another reflow
+            void retryTaskElement.offsetHeight;
+            
+            // Apply inline styles as a backup
+            retryTaskElement.style.boxShadow = "0 0 15px 5px rgba(59, 130, 246, 0.8)";
+            retryTaskElement.style.zIndex = "50";
+            retryTaskElement.style.border = "3px solid #3b82f6";
+            retryTaskElement.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+            
             // Scroll the task into view
-            taskElement.scrollIntoView({
+            retryTaskElement.scrollIntoView({
               behavior: "smooth",
               block: "center",
             });
-            console.log("Scrolled element into view");
-
+            console.log("Scrolled element into view (retry)");
+            
             // Remove highlight after 3 seconds
             setTimeout(() => {
-              taskElement.classList.remove("highlight-task");
+              retryTaskElement.classList.remove("highlight-task");
+              // Reset inline styles
+              retryTaskElement.style.boxShadow = "";
+              retryTaskElement.style.zIndex = "";
+              retryTaskElement.style.border = "";
+              retryTaskElement.style.backgroundColor = "";
             }, 3000);
           } else {
-            console.error("Task element not found in DOM for ID:", taskId);
-
-            // If element not found, try again with a longer delay
-            setTimeout(() => {
-              const retryTaskElement = document.getElementById(
-                `calendar-task-${taskId}`,
-              );
-              console.log("Retry task element found:", retryTaskElement);
-
-              if (retryTaskElement) {
-                // Force a reflow without using offsetHeight
-                // This is a no-op that forces layout recalculation
-                window.getComputedStyle(retryTaskElement).getPropertyValue('opacity');
-
-                // Add highlight class
-                retryTaskElement.classList.add("highlight-task");
-                console.log("Added highlight class to element (retry)");
-
-                // Scroll the task into view
-                retryTaskElement.scrollIntoView({
-                  behavior: "smooth",
-                  block: "center",
-                });
-                console.log("Scrolled element into view (retry)");
-
-                // Remove highlight after 3 seconds
-                setTimeout(() => {
-                  retryTaskElement.classList.remove("highlight-task");
-                }, 3000);
-              } else {
-                console.error(
-                  "Task element still not found after retry for ID:",
-                  taskId,
-                );
+            console.error("Task element still not found after retry for ID:", taskId);
+            
+            // As a last resort, try to find any task from the same assignment
+            if (assignmentId) {
+              const assignmentTasks = calendarTasks.filter(t => t.assignmentId === assignmentId);
+              if (assignmentTasks.length > 0) {
+                console.log("Trying to focus on another task from the same assignment");
+                
+                // Try to find any task element from the same assignment
+                for (const aTask of assignmentTasks) {
+                  const aTaskElement = document.getElementById(`calendar-task-${aTask.id}`);
+                  if (aTaskElement) {
+                    // Force a reflow
+                    void aTaskElement.offsetHeight;
+                    
+                    // Remove any existing highlight classes first
+                    document.querySelectorAll('.highlight-task').forEach(el => {
+                      el.classList.remove('highlight-task');
+                    });
+                    
+                    // Add highlight class
+                    aTaskElement.classList.add("highlight-task");
+                    
+                    // Force another reflow
+                    void aTaskElement.offsetHeight;
+                    
+                    // Apply inline styles as a backup
+                    aTaskElement.style.boxShadow = "0 0 15px 5px rgba(59, 130, 246, 0.8)";
+                    aTaskElement.style.zIndex = "50";
+                    aTaskElement.style.border = "3px solid #3b82f6";
+                    aTaskElement.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+                    
+                    // Scroll the task into view
+                    aTaskElement.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                    
+                    // Remove highlight after 3 seconds
+                    setTimeout(() => {
+                      aTaskElement.classList.remove("highlight-task");
+                      // Reset inline styles
+                      aTaskElement.style.boxShadow = "";
+                      aTaskElement.style.zIndex = "";
+                      aTaskElement.style.border = "";
+                      aTaskElement.style.backgroundColor = "";
+                    }, 3000);
+                    
+                    break;
+                  }
+                }
               }
-            }, 500);
+            }
           }
-        }, 300); // Increased delay to ensure DOM is ready
-      } else {
-        console.error("Task not found in calendar tasks for ID:", taskId);
+        }, 500);
       }
     };
 
@@ -310,7 +440,7 @@ const CalendarPanel = ({
     return () => {
       window.removeEventListener("focus-calendar-task", handleFocusTask);
     };
-  }, [calendarTasks]);
+  }, [calendarTasks, showMonthView, setShowMonthView, setSelectedMonth, setSelectedYear, setInternalSelectedDate, effectiveSelectedDate]);
 
   // Listen for calendar-tasks-updated events
   useEffect(() => {
@@ -353,6 +483,74 @@ const CalendarPanel = ({
       window.removeEventListener("calendar-task-overlap", handleCalendarTaskOverlap);
     };
   }, []);
+
+  // Listen for navigate-calendar-to-date events
+  useEffect(() => {
+    console.log("Setting up navigate-calendar-to-date event listener in CalendarPanel");
+    
+    const handleNavigateToDate = (event: any) => {
+      console.log("Navigate calendar to date event received in CalendarPanel", event.detail);
+      
+      const { date, taskId } = event.detail;
+      
+      if (!date) {
+        console.error("No date provided in navigate-calendar-to-date event");
+        return;
+      }
+      
+      // Parse the date
+      const targetDate = new Date(date);
+      console.log("Navigating calendar to date:", targetDate);
+      
+      // Always switch to day view first
+      if (showMonthView) {
+        console.log("Switching from month view to day view");
+        setShowMonthView(false);
+      }
+      
+      // Check if we need to change the date
+      const currentDateISO = `${effectiveSelectedDate.getFullYear()}-${String(effectiveSelectedDate.getMonth() + 1).padStart(2, "0")}-${String(effectiveSelectedDate.getDate()).padStart(2, "0")}`;
+      const targetDateISO = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+      const dateChanged = currentDateISO !== targetDateISO;
+      
+      console.log("Current date:", currentDateISO, "Target date:", targetDateISO, "Date changed:", dateChanged);
+      
+      // Update the month and year state variables to match the target date
+      setSelectedMonth(targetDate.getMonth());
+      setSelectedYear(targetDate.getFullYear());
+      setInternalSelectedDate(targetDate);
+      
+      // Force a re-render to ensure the calendar updates with the new date
+      setTimeout(() => {
+        // Dispatch an event to force a re-render
+        window.dispatchEvent(new Event('resize'));
+        
+        // Log the current date after the update
+        const updatedDateISO = `${effectiveSelectedDate.getFullYear()}-${String(effectiveSelectedDate.getMonth() + 1).padStart(2, "0")}-${String(effectiveSelectedDate.getDate()).padStart(2, "0")}`;
+        console.log("Updated date after navigation:", updatedDateISO);
+        
+        // Verify that the date was changed correctly
+        if (updatedDateISO !== targetDateISO) {
+          console.warn("Date navigation may not have worked correctly. Trying again...");
+          
+          // Try again with a direct approach
+          setInternalSelectedDate(new Date(date));
+          
+          // Force another re-render
+          setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+          }, 50);
+        }
+      }, 100);
+    };
+    
+    // Use a direct function reference for the event listener
+    window.addEventListener("navigate-calendar-to-date", handleNavigateToDate);
+    
+    return () => {
+      window.removeEventListener("navigate-calendar-to-date", handleNavigateToDate);
+    };
+  }, [showMonthView, setShowMonthView, setSelectedMonth, setSelectedYear, setInternalSelectedDate, effectiveSelectedDate]);
 
   // Filter tasks for the selected date
   const filteredTasks = calendarTasks.filter((task) => {
@@ -419,8 +617,8 @@ const CalendarPanel = ({
     }
     
     // If there's an overlap, find gaps between existing tasks
-    let lastEndTime = 8 * 60; // Start at 8:00 AM
-    const endOfDay = 23 * 60; // End at 11:00 PM
+    let lastEndTime = 8 * 60; // Start at 8:00 AM (0px)
+    const endOfDay = 23 * 60; // End at 11:00 PM (23px)
     
     // Add a dummy task at the end of the day
     sortedTasks.push({
@@ -463,22 +661,20 @@ const CalendarPanel = ({
     return startTime;
   };
 
-  // Drop handler for the entire calendar
+  // Set up the drop target for the calendar grid
   const [{ isOver }, drop] = useDrop(() => ({
     accept: ["task", "calendar-task"],
-    hover: (item, monitor) => {
+    hover: (item: any, monitor) => {
       if (!calendarGridRef.current) return;
 
-      // Get mouse position relative to the calendar
-      const clientOffset = monitor.getClientOffset();
-      if (!clientOffset) return;
+      // Get the mouse position relative to the calendar grid
+      const hoverBoundingRect = calendarGridRef.current.getBoundingClientRect();
+      const mouseY = monitor.getClientOffset()?.y || 0;
+      const hoverY = mouseY - hoverBoundingRect.top;
 
-      const calendarRect = calendarGridRef.current.getBoundingClientRect();
-      const y = clientOffset.y - calendarRect.top;
-
-      // Calculate which time slot the mouse is hovering over
-      // Each hour is 60px tall, starting from 8:00 AM
-      const hoursSince8AM = y / 60;
+      // Calculate the time based on the mouse position
+      // Each hour is 60px in height, starting from 8:00 AM (0px)
+      const hoursSince8AM = hoverY / 60;
       const hour = Math.floor(hoursSince8AM) + 8;
       const minute = Math.floor((hoursSince8AM % 1) * 60);
       const minuteRounded = minute < 30 ? 0 : 30;
@@ -489,46 +685,97 @@ const CalendarPanel = ({
       // Add visual feedback for the time slot being hovered over
       const allTimeSlots = document.querySelectorAll(".time-slot");
       allTimeSlots.forEach((slot) => {
-        slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30");
+        slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30", "drop-active");
       });
 
       const targetHour = Math.floor(hoursSince8AM);
       const targetSlot = document.querySelector(`.time-slot-${targetHour}`);
       if (targetSlot) {
-        targetSlot.classList.add("bg-blue-50", "dark:bg-blue-900/30");
+        targetSlot.classList.add("bg-blue-50", "dark:bg-blue-900/30", "drop-active");
+      }
+      
+      // Add a placeholder task at the hover position to show where the task will be placed
+      const placeholderTask = document.getElementById("calendar-task-placeholder");
+      if (placeholderTask) {
+        const top = targetHour * 60;
+        const duration = item.duration || 30;
+        const height = (duration / 60) * 60;
+        
+        placeholderTask.style.top = `${top}px`;
+        placeholderTask.style.height = `${height}px`;
+        placeholderTask.style.display = "block";
       }
     },
-
+    canDrop: (item, monitor) => {
+      // Always allow dropping on the calendar grid
+      return true;
+    },
     drop: (
-      item: Task & { assignmentId: string; assignmentTitle: string },
+      item: Task & { assignmentId: string; assignmentTitle: string; type?: string },
       monitor,
     ) => {
-      if (!calendarGridRef.current || !hoveredTimeSlot) return;
+      console.log("Item dropped on calendar grid:", item);
+      if (!calendarGridRef.current || !hoveredTimeSlot) {
+        console.log("No valid drop target or hovered time slot");
+        return;
+      }
 
       const duration = item.duration || 30; // Use task's duration or default to 30 minutes
+      console.log("Task duration:", duration);
 
       // Check if the selected time slot would cause an overlap
       let finalTimeSlot = hoveredTimeSlot;
-      if (checkForOverlap(hoveredTimeSlot, duration)) {
+      if (checkForOverlap(hoveredTimeSlot, duration, item.id)) {
         // Find the next available time slot
         finalTimeSlot = findNextAvailableSlot(hoveredTimeSlot, duration);
+        console.log("Found next available time slot:", finalTimeSlot);
       }
 
       // Calculate end time based on the final time slot
       const endTime = calculateEndTime(finalTimeSlot, duration);
+      console.log("Calculated end time:", endTime);
 
-      onAddTask({
-        ...item,
-        assignmentId: item.assignmentId,
-        assignmentTitle: item.assignmentTitle,
-        startTime: finalTimeSlot,
-        endTime: endTime,
-        duration: duration,
-        date: selectedDateISO,
-      });
+      // Check if this is a new task or an existing calendar task
+      const existingTask = calendarTasks.find(t => t.id === item.id);
+      const isNewTask = !existingTask;
+      console.log("Is new task:", isNewTask);
+
+      if (isNewTask) {
+        console.log("Adding new task to calendar");
+        onAddTask({
+          id: item.id,
+          assignmentId: item.assignmentId || "",
+          assignmentTitle: item.assignmentTitle || "",
+          title: item.title,
+          completed: item.completed,
+          startTime: finalTimeSlot,
+          endTime: endTime,
+          duration: duration,
+          date: selectedDateISO,
+        });
+        console.log("Task added to calendar");
+        
+        // Dispatch an event to notify that a task has been added
+        window.dispatchEvent(
+          new CustomEvent("calendar-tasks-updated", {
+            detail: { taskId: item.id },
+          })
+        );
+      } else {
+        // This is an existing calendar task being moved or rescheduled
+        console.log("Updating existing calendar task");
+        onUpdateTaskTime(item.id, finalTimeSlot, endTime, duration);
+        console.log("Task updated");
+      }
+
+      // Hide the placeholder
+      const placeholderTask = document.getElementById("calendar-task-placeholder");
+      if (placeholderTask) {
+        placeholderTask.style.display = "none";
+      }
 
       setHoveredTimeSlot(null);
-      return { name: "CalendarPanel" };
+      return { name: "CalendarPanel", success: true };
     },
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
@@ -571,6 +818,7 @@ const CalendarPanel = ({
         endTime: task.endTime,
         duration: task.duration,
         date: task.date,
+        type: "calendar-task", // Explicitly set the type property
       },
       end: (item, monitor) => {
         // Reset any UI state when drag ends
@@ -578,33 +826,144 @@ const CalendarPanel = ({
           // If not dropped on a valid target
           console.log("Drag ended without valid drop");
         }
+        
+        // Hide the placeholder
+        const placeholderTask = document.getElementById("calendar-task-placeholder");
+        if (placeholderTask) {
+          placeholderTask.style.display = "none";
+        }
       },
       collect: (monitor) => ({
         isDragging: !!monitor.isDragging(),
       }),
+      options: {
+        dropEffect: 'move',
+      },
     }));
 
     const [isEditing, setIsEditing] = useState(false);
     const [sliderValue, setSliderValue] = useState(task.duration || 30);
+    const [isHovered, setIsHovered] = useState(false);
 
     const top = calculateTaskPosition(task.startTime || "08:00");
     const height = calculateTaskHeight(task.duration || 30);
     const isShortTask = (task.duration || 30) < 30;
 
+    // Determine task status based on current time and task properties
+    const getTaskStatus = () => {
+      if (task.completed) {
+        return { 
+          status: "Completed", 
+          className: "bg-gray-100 dark:bg-gray-700", 
+          statusText: "✅ Completed",
+          borderClass: "border-gray-300 dark:border-gray-600"
+        };
+      }
+
+      // Convert task date and times to Date objects for comparison
+      const taskDate = task.date ? new Date(task.date) : new Date();
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // If task date is in the past, it's overdue
+      if (taskDate < today) {
+        return { 
+          status: "Overdue", 
+          className: "bg-red-100 dark:bg-red-900", 
+          statusText: "⚠️ Overdue",
+          borderClass: "border-red-400 dark:border-red-700"
+        };
+      }
+      
+      // If task is today, check the time
+      if (taskDate.getDate() === today.getDate() && 
+          taskDate.getMonth() === today.getMonth() && 
+          taskDate.getFullYear() === today.getFullYear()) {
+        
+        if (task.startTime && task.endTime) {
+          const [startHour, startMinute] = task.startTime.split(':').map(Number);
+          const [endHour, endMinute] = task.endTime.split(':').map(Number);
+          
+          const taskStartTime = new Date(today);
+          taskStartTime.setHours(startHour, startMinute, 0);
+          
+          const taskEndTime = new Date(today);
+          taskEndTime.setHours(endHour, endMinute, 0);
+          
+          // If current time is past end time, it's overdue
+          if (now > taskEndTime) {
+            return { 
+              status: "Overdue", 
+              className: "bg-red-100 dark:bg-red-900", 
+              statusText: "⚠️ Overdue",
+              borderClass: "border-red-400 dark:border-red-700"
+            };
+          }
+          
+          // If current time is between start and end time, it's in progress
+          if (now >= taskStartTime && now <= taskEndTime) {
+            return { 
+              status: "In Progress", 
+              className: "bg-green-100 dark:bg-green-900", 
+              statusText: "⏳ In Progress",
+              borderClass: "border-green-400 dark:border-green-700"
+            };
+          }
+          
+          // If current time is before start time but today, it's upcoming
+          if (now < taskStartTime) {
+            return { 
+              status: "Upcoming", 
+              className: task.isBlockedTime ? "bg-orange-100 dark:bg-orange-900" : "bg-blue-100 dark:bg-blue-900", 
+              statusText: "🔜 Upcoming",
+              borderClass: task.isBlockedTime ? "border-orange-400 dark:border-orange-700" : "border-blue-400 dark:border-blue-700"
+            };
+          }
+        }
+      }
+      
+      // Default for future dates
+      return { 
+        status: "Upcoming", 
+        className: task.isBlockedTime ? "bg-orange-100 dark:bg-orange-900" : "bg-blue-100 dark:bg-blue-900", 
+        statusText: "🔜 Upcoming",
+        borderClass: task.isBlockedTime ? "border-orange-400 dark:border-orange-700" : "border-blue-400 dark:border-blue-700"
+      };
+    };
+
+    const taskStatus = getTaskStatus();
+
     return (
       <div
         id={`calendar-task-${task.id}`}
+        data-task-id={task.id}
         ref={preview}
-        className={`absolute left-[70px] rounded-md px-2 py-1 ${task.completed ? "bg-gray-100 dark:bg-gray-700" : task.isBlockedTime ? "bg-orange-100 dark:bg-orange-900" : "bg-blue-100 dark:bg-blue-900"} ${isDragging ? "opacity-50" : ""} border border-gray-300 dark:border-gray-600 shadow-sm transition-all duration-300`}
+        className={`absolute left-[70px] rounded-md px-2 py-1 ${taskStatus.className} ${isDragging ? "opacity-50 task-dragging" : ""} border ${taskStatus.borderClass} shadow-sm transition-all duration-300 task-tooltip-trigger`}
         style={{
           top: `${top}px`,
           height: `${height}px`,
-          zIndex: isEditing ? 10 : 1,
+          zIndex: isHovered || isEditing ? 50 : 1,
           width: "calc(100% - 90px)",
           minWidth: "300px",
         }}
-        title={`${task.assignmentTitle}: ${task.title} (${formatTimeForDisplay(task.startTime || "")} - ${formatTimeForDisplay(task.endTime || "")})`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
+        {/* Tooltip showing detailed information */}
+        <div className="task-tooltip calendar-task-tooltip" style={{ bottom: '100%', left: '50%', transform: 'translateX(-50%) translateY(-5px)', zIndex: 1000 }}>
+          <div className="task-tooltip-content">
+            <div className="font-semibold">{task.title}</div>
+            <div className="text-xs opacity-80">
+              <div>📅 {task.date ? new Date(task.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : "Unknown date"}</div>
+              <div>⏰ {formatTimeForDisplay(task.startTime || "")} - {formatTimeForDisplay(task.endTime || "")}</div>
+              <div>⏱️ Duration: {task.duration || 30} minutes</div>
+              <div>📝 {task.assignmentTitle}</div>
+              <div>Status: {taskStatus.statusText}</div>
+            </div>
+          </div>
+          <div className="task-tooltip-arrow-down" style={{ left: '50%', transform: 'translateX(-50%)' }}></div>
+        </div>
+        
         {isEditing && (
           <div className="absolute inset-0 bg-black bg-opacity-20 rounded-md z-0"></div>
         )}
@@ -640,13 +999,24 @@ const CalendarPanel = ({
                     </Button>
                   </div>
                 </div>
-                <div>
+                <div className="flex items-center justify-between">
                   <h4
                     className={`text-xs font-medium italic truncate ${task.completed ? "line-through text-gray-500 dark:text-gray-500" : "text-foreground"}`}
                     title={`${task.assignmentTitle}: ${task.title}`}
                   >
                     {task.title.length > 10 ? "..." : task.title}
                   </h4>
+                  <Badge 
+                    variant="outline" 
+                    className={`text-[9px] h-4 px-1 ml-1 ${
+                      taskStatus.status === "Completed" ? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" : 
+                      taskStatus.status === "Overdue" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
+                      taskStatus.status === "In Progress" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
+                      "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                    }`}
+                  >
+                    {taskStatus.status}
+                  </Badge>
                 </div>
               </div>
             ) : (
@@ -675,12 +1045,25 @@ const CalendarPanel = ({
                     </Button>
                   </div>
                 </div>
-                <h4
-                  className={`text-xs font-medium italic truncate ${task.completed ? "line-through text-gray-500 dark:text-gray-500" : "text-foreground"}`}
-                  title={`${task.assignmentTitle}: ${task.title}`}
-                >
-                  {task.title}
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4
+                    className={`text-xs font-medium italic truncate ${task.completed ? "line-through text-gray-500 dark:text-gray-500" : "text-foreground"}`}
+                    title={`${task.assignmentTitle}: ${task.title}`}
+                  >
+                    {task.title}
+                  </h4>
+                  <Badge 
+                    variant="outline" 
+                    className={`text-[9px] h-4 px-1 ml-1 ${
+                      taskStatus.status === "Completed" ? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" : 
+                      taskStatus.status === "Overdue" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
+                      taskStatus.status === "In Progress" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
+                      "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                    }`}
+                  >
+                    {taskStatus.status}
+                  </Badge>
+                </div>
               </>
             )}
 
@@ -970,50 +1353,106 @@ const CalendarPanel = ({
         // Add visual feedback for the time slot being hovered over
         const allTimeSlots = document.querySelectorAll(".time-slot");
         allTimeSlots.forEach((slot) => {
-          slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30");
+          slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30", "drop-active");
         });
 
         const targetSlot = document.querySelector(`.time-slot-${index}`);
         if (targetSlot) {
-          targetSlot.classList.add("bg-blue-50", "dark:bg-blue-900/30");
+          targetSlot.classList.add("bg-blue-50", "dark:bg-blue-900/30", "drop-active");
+        }
+        
+        // Update the placeholder position
+        const placeholderTask = document.getElementById("calendar-task-placeholder");
+        if (placeholderTask) {
+          const top = index * 60;
+          // Try to get the duration from the dragged item, or default to 30
+          const draggedItems = document.querySelectorAll(".task-dragging");
+          let duration = 30;
+          if (draggedItems.length > 0) {
+            const draggedItem = draggedItems[0] as HTMLElement;
+            const draggedItemId = draggedItem.getAttribute("data-task-id");
+            if (draggedItemId) {
+              const task = calendarTasks.find(t => t.id === draggedItemId);
+              if (task && task.duration) {
+                duration = task.duration;
+              }
+            }
+          }
+          const height = (duration / 60) * 60;
+          
+          placeholderTask.style.top = `${top}px`;
+          placeholderTask.style.height = `${height}px`;
+          placeholderTask.style.display = "block";
         }
       },
+      canDrop: (item, monitor) => {
+        // Always allow dropping on time slots
+        return true;
+      },
       drop: (item: any) => {
+        console.log("Item dropped on TimeSlot:", item, "Time slot:", time);
+        
         // Use the task's duration or default to 30 minutes
         const duration = item.duration || 30;
+        console.log("Task duration:", duration);
 
         // Check if the selected time slot would cause an overlap (excluding the task being moved)
         let finalTimeSlot = time;
         if (checkForOverlap(time, duration, item.id, item.isBlockedTime)) {
           // Find the next available time slot
           finalTimeSlot = findNextAvailableSlot(time, duration);
+          console.log("Found next available time slot:", finalTimeSlot);
         }
 
         const endTime = calculateEndTime(finalTimeSlot, duration);
+        console.log("Calculated end time:", endTime);
 
-        // If it's a calendar task being moved, use its existing properties
-        if (item.startTime) {
-          onUpdateTaskTime(item.id, finalTimeSlot, endTime, duration);
-        } else {
-          // It's a new task being added from assignments
+        // Check if this is a new task or an existing calendar task
+        const existingTask = calendarTasks.find(t => t.id === item.id);
+        const isNewTask = !existingTask;
+        console.log("Is new task:", isNewTask);
+
+        // Update the task time
+        onUpdateTaskTime(item.id, finalTimeSlot, endTime, duration);
+        console.log("Updated task time");
+
+        // Add the task to the calendar if it's not already there
+        if (isNewTask) {
+          console.log("Adding new task to calendar");
           onAddTask({
-            ...item,
-            assignmentId: item.assignmentId,
-            assignmentTitle: item.assignmentTitle,
+            id: item.id,
+            assignmentId: item.assignmentId || "",
+            assignmentTitle: item.assignmentTitle || "",
+            title: item.title,
+            completed: item.completed,
             startTime: finalTimeSlot,
-            endTime: endTime,
-            duration: duration,
+            endTime,
+            duration,
             date: selectedDateISO,
           });
+          console.log("Task added to calendar");
+          
+          // Dispatch an event to notify that a task has been added
+          window.dispatchEvent(
+            new CustomEvent("calendar-tasks-updated", {
+              detail: { taskId: item.id },
+            })
+          );
         }
 
-        // Remove hover effect after drop
+        // Clear any hover effects
         const allTimeSlots = document.querySelectorAll(".time-slot");
         allTimeSlots.forEach((slot) => {
-          slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30");
+          slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30", "drop-active");
         });
-
-        return { name: "TimeSlot" };
+        
+        // Hide the placeholder
+        const placeholderTask = document.getElementById("calendar-task-placeholder");
+        if (placeholderTask) {
+          placeholderTask.style.display = "none";
+        }
+        
+        return { name: "TimeSlot", success: true };
       },
       collect: (monitor) => ({
         isOver: !!monitor.isOver(),
@@ -1022,21 +1461,64 @@ const CalendarPanel = ({
 
     return (
       <div
+        id={`time-slot-${index}`}
         ref={dropRef}
-        className={`time-slot time-slot-${index} h-[60px] border-t border-gray-200 dark:border-gray-700 relative ${isOver ? "bg-blue-50 dark:bg-blue-900/30" : ""} transition-colors duration-150`}
+        className={`time-slot time-slot-${index} absolute w-full border-b border-gray-200 dark:border-gray-700 ${isOver ? "drop-active" : ""}`}
+        style={{
+          top: `${index * 60}px`,
+          height: "60px",
+          left: 0,
+          right: 0,
+          backgroundColor: isOver ? "rgba(59, 130, 246, 0.1)" : "transparent",
+        }}
       >
-        <div className="absolute left-0 top-[-10px] text-xs text-gray-500 dark:text-gray-400 w-[60px] text-right pr-2">
+        <div className="absolute left-0 text-xs text-gray-500 dark:text-gray-400 -translate-y-1/2">
           {formatTimeForDisplay(time)}
         </div>
-        {/* Add a visible horizontal line for each time slot */}
-        <div className="absolute left-0 right-0 border-t border-gray-200 dark:border-gray-700 top-0"></div>
       </div>
     );
   };
 
+  // Clean up any UI elements when the component unmounts
+  useEffect(() => {
+    const handleDragEnd = () => {
+      // Hide the placeholder
+      const placeholderTask = document.getElementById("calendar-task-placeholder");
+      if (placeholderTask) {
+        placeholderTask.style.display = "none";
+      }
+      
+      // Clear any hover effects
+      const allTimeSlots = document.querySelectorAll(".time-slot");
+      allTimeSlots.forEach((slot) => {
+        slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30", "drop-active");
+      });
+    };
+    
+    // Add event listener for drag end
+    window.addEventListener("dragend", handleDragEnd);
+    
+    return () => {
+      // Clean up event listener
+      window.removeEventListener("dragend", handleDragEnd);
+      
+      // Hide the placeholder
+      const placeholderTask = document.getElementById("calendar-task-placeholder");
+      if (placeholderTask) {
+        placeholderTask.style.display = "none";
+      }
+      
+      // Clear any hover effects
+      const allTimeSlots = document.querySelectorAll(".time-slot");
+      allTimeSlots.forEach((slot) => {
+        slot.classList.remove("bg-blue-50", "dark:bg-blue-900/30", "drop-active");
+      });
+    };
+  }, []);
+
   return (
     <Card
-      className={`${isEmbedded ? "w-full h-full shadow-none border-0" : "w-[500px]"} bg-card text-card-foreground ${!isEmbedded ? "shadow-lg" : ""} ${isOver ? "ring-2 ring-primary" : ""}`}
+      className={`${isEmbedded ? "w-full h-full shadow-none border-0" : "w-[500px]"} bg-card text-card-foreground ${!isEmbedded ? "shadow-lg" : ""} ${isOver ? "ring-2 ring-primary" : ""} calendar-panel`}
     >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
@@ -1262,6 +1744,13 @@ const CalendarPanel = ({
                 {TIME_SLOTS.map((time, index) => (
                   <TimeSlot key={time} time={time} index={index} />
                 ))}
+
+                {/* Placeholder for task being dragged */}
+                <div
+                  id="calendar-task-placeholder"
+                  className="calendar-task-placeholder absolute left-[70px] w-[calc(100%-90px)] hidden"
+                  style={{ zIndex: 5, pointerEvents: "none" }}
+                ></div>
 
                 {/* Current time indicator - only show for today */}
                 {selectedDateISO ===

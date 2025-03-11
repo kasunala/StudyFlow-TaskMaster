@@ -274,6 +274,7 @@ const TaskItem = React.memo(({
 }) => {
   // Create a ref for the task element
   const taskElementRef = React.useRef<HTMLDivElement>(null);
+  const gripRef = React.useRef<HTMLDivElement>(null);
   
   // Safely use useDrag only if we're in a DndProvider context
   let dragRef: any = null;
@@ -293,13 +294,31 @@ const TaskItem = React.memo(({
           title: task.title,
           completed: task.completed,
           index: taskIndex,
+          type: "task", // Explicitly set the type property
+          duration: task.duration || 30, // Ensure duration is set
         },
-        canDrag: true,
+        canDrag: true, // Allow all tasks to be dragged
         collect: (monitor) => ({
           isDragging: !!monitor.isDragging(),
         }),
+        end: (item, monitor) => {
+          // Log when drag ends
+          console.log("Drag ended", item, monitor.didDrop());
+          if (!monitor.didDrop()) {
+            console.log("Item was not dropped on a valid target");
+          }
+          
+          // Hide the placeholder
+          const placeholderTask = document.getElementById("calendar-task-placeholder");
+          if (placeholderTask) {
+            placeholderTask.style.display = "none";
+          }
+        },
+        options: {
+          dropEffect: 'copy',
+        },
       }),
-      [task.id, task.title, task.completed, assignmentId, assignmentTitle, taskIndex],
+      [task.id, task.title, task.completed, assignmentId, assignmentTitle, taskIndex, calendarTasks],
     );
 
     dragRef = drag;
@@ -312,7 +331,9 @@ const TaskItem = React.memo(({
   
   // Apply the drag ref to the task element when it's available
   React.useEffect(() => {
+    console.log("TaskItem useEffect - task:", task.id, "dragRef:", !!dragRef, "taskElementRef.current:", !!taskElementRef.current);
     if (dragRef && taskElementRef.current) {
+      console.log("Applying drag ref to task element:", task.id);
       dragRef(taskElementRef.current);
     }
   }, [dragRef, task.id]);
@@ -321,13 +342,9 @@ const TaskItem = React.memo(({
     <div
       ref={taskElementRef}
       data-task-id={task.id}
-      className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50" : ""}`}
+      className={`flex items-center justify-between space-x-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 ${isDragging ? "opacity-50 task-dragging" : ""}`}
       style={{
-        cursor: calendarTasks.some(
-          (calTask) => calTask.id === task.id,
-        )
-          ? "default"
-          : "grab",
+        cursor: "grab",
       }}
     >
       <div className="flex items-center space-x-2 flex-grow">
@@ -341,21 +358,147 @@ const TaskItem = React.memo(({
           {calendarTasks.some(
             (calTask) => calTask.id === task.id,
           ) && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                window.dispatchEvent(
-                  new CustomEvent("focus-calendar-task", {
-                    detail: { taskId: task.id },
-                  }),
-                );
-              }}
-              className="mr-1 text-primary hover:text-primary/80"
-              title="View in calendar"
-            >
-              <CalendarIcon className="h-3 w-3" />
-            </button>
+            <div className="relative task-tooltip-trigger">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  // Find the calendar task with this ID to get all its details
+                  const calendarTask = calendarTasks.find(calTask => calTask.id === task.id);
+                  console.log("Calendar icon clicked for task:", task.id);
+                  console.log("Calendar task found:", calendarTask);
+                  console.log("Assignment ID:", assignmentId);
+                  
+                  if (!calendarTask || !calendarTask.date) {
+                    console.error("Calendar task not found or missing date information");
+                    return;
+                  }
+                  
+                  // Make sure the calendar panel is visible
+                  window.dispatchEvent(
+                    new CustomEvent("show-calendar-panel", {
+                      detail: { show: true },
+                    })
+                  );
+                  
+                  // Force the calendar to navigate to the correct date first
+                  window.dispatchEvent(
+                    new CustomEvent("navigate-calendar-to-date", {
+                      detail: { 
+                        date: calendarTask.date,
+                        taskId: task.id
+                      },
+                    })
+                  );
+                  
+                  // Short delay before dispatching the focus event
+                  setTimeout(() => {
+                    // Dispatch the event with all necessary information
+                    window.dispatchEvent(
+                      new CustomEvent("focus-calendar-task", {
+                        detail: { 
+                          taskId: task.id,
+                          date: calendarTask.date,
+                          startTime: calendarTask.startTime,
+                          assignmentId: assignmentId,
+                          assignmentTitle: assignmentTitle,
+                          // Include additional information that might be helpful
+                          taskTitle: task.title,
+                          taskCompleted: task.completed,
+                          taskDuration: calendarTask.duration || task.duration || 30,
+                        },
+                      }),
+                    );
+                    console.log("focus-calendar-task event dispatched");
+                    
+                    // As a fallback, try to directly access and highlight the task element
+                    setTimeout(() => {
+                      const taskElement = document.getElementById(`calendar-task-${task.id}`);
+                      if (taskElement) {
+                        console.log("Direct access - found task element:", taskElement);
+                        
+                        // Force a reflow
+                        void taskElement.offsetHeight;
+                        
+                        // Remove any existing highlight classes first
+                        document.querySelectorAll('.highlight-task').forEach(el => {
+                          el.classList.remove('highlight-task');
+                        });
+                        
+                        // Add highlight class
+                        taskElement.classList.add("highlight-task");
+                        
+                        // Force another reflow
+                        void taskElement.offsetHeight;
+                        
+                        // Apply inline styles as a backup
+                        taskElement.style.boxShadow = "0 0 15px 5px rgba(59, 130, 246, 0.8)";
+                        taskElement.style.zIndex = "50";
+                        taskElement.style.border = "3px solid #3b82f6";
+                        taskElement.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+                        
+                        // Scroll the task into view
+                        taskElement.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        });
+                        
+                        // Remove highlight after 3 seconds
+                        setTimeout(() => {
+                          taskElement.classList.remove("highlight-task");
+                          // Reset inline styles
+                          taskElement.style.boxShadow = "";
+                          taskElement.style.zIndex = "";
+                          taskElement.style.border = "";
+                          taskElement.style.backgroundColor = "";
+                        }, 3000);
+                      }
+                    }, 500);
+                  }, 200);
+                }}
+                className="mr-1 text-primary hover:text-primary/80"
+                aria-label="View in calendar"
+              >
+                <CalendarIcon className="h-3 w-3" />
+              </button>
+              
+              {/* Tooltip showing date and time */}
+              <div className="task-tooltip">
+                <div className="task-tooltip-content">
+                  {(() => {
+                    const calendarTask = calendarTasks.find(calTask => calTask.id === task.id);
+                    if (!calendarTask) return "Scheduled task";
+                    
+                    // Format the date
+                    const dateObj = calendarTask.date ? new Date(calendarTask.date) : null;
+                    const formattedDate = dateObj ? 
+                      dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 
+                      "Unknown date";
+                    
+                    // Format the time using the formatTime function if available
+                    const formatTimeString = (timeStr: string) => {
+                      // Simple 24h to 12h conversion if formatTime is not available
+                      if (!timeStr) return "";
+                      try {
+                        const [hours, minutes] = timeStr.split(':').map(Number);
+                        const period = hours >= 12 ? 'PM' : 'AM';
+                        const hours12 = hours % 12 || 12;
+                        return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+                      } catch (e) {
+                        return timeStr;
+                      }
+                    };
+                    
+                    const startTime = calendarTask.startTime ? formatTimeString(calendarTask.startTime) : "Unknown time";
+                    const endTime = calendarTask.endTime ? formatTimeString(calendarTask.endTime) : "";
+                    const timeRange = endTime ? `${startTime} - ${endTime}` : startTime;
+                    
+                    return `📅 ${formattedDate} ⏰ ${timeRange}`;
+                  })()}
+                </div>
+                <div className="task-tooltip-arrow-down"></div>
+              </div>
+            </div>
           )}
           <label
             htmlFor={task.id}
@@ -366,8 +509,17 @@ const TaskItem = React.memo(({
         </div>
       </div>
       <div
-        className="flex items-center self-stretch cursor-grab p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+        ref={gripRef}
+        className="flex items-center self-stretch cursor-grab p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 task-drag-handle"
         title="Drag to calendar or reorder"
+        onMouseDown={() => {
+          console.log("GripVertical mouse down - task:", task.id);
+          // Make the entire task element draggable
+          if (dragRef && taskElementRef.current) {
+            console.log("Making task element draggable:", task.id);
+            dragRef(taskElementRef.current);
+          }
+        }}
       >
         <GripVertical
           className="h-4 w-4 text-gray-500 dark:text-gray-400"

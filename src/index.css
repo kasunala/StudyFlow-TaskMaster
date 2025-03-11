@@ -75,28 +75,35 @@
   }
 }
 
-.highlight-task {
-  animation: pulse 1.5s ease-in-out 2;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-  z-index: 10 !important;
+/* Make the highlight-task class more specific and forceful */
+div[id^="calendar-task-"].highlight-task {
+  animation: pulse 1.5s ease-in-out 2 !important;
+  box-shadow: 0 0 15px 5px rgba(59, 130, 246, 0.8) !important;
+  z-index: 50 !important;
+  transform: scale(1.05) !important;
+  border: 3px solid #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.3) !important;
+  position: relative !important;
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.8);
+  }
+  70% {
+    box-shadow: 0 0 20px 10px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
 }
 
 .overlap-error {
   animation: shake 0.5s ease-in-out;
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.7) !important;
   z-index: 10 !important;
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
-  }
 }
 
 @keyframes shake {
@@ -107,25 +114,156 @@
 
 /* Task dragging animation styles */
 .task-dragging {
-  @apply scale-95 ring-2 ring-primary/50 bg-primary/5 shadow-lg;
-  animation: task-drag-start 0.2s ease-out forwards;
+  opacity: 0.5;
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  pointer-events: none;
+  animation: task-drag-start 0.3s ease-in-out;
 }
 
 @keyframes task-drag-start {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+    opacity: 1;
   }
   100% {
-    transform: scale(0.95);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: scale(1.05);
+    opacity: 0.5;
   }
 }
 
 .task-drag-handle {
-  @apply transition-all duration-200;
+  cursor: grab;
+  transition: all 0.2s ease;
+  background-color: rgba(59, 130, 246, 0.1);
+  border-radius: 4px;
 }
 
 .task-drag-handle:hover {
-  @apply bg-primary/10 rounded-md;
+  color: #3b82f6;
+  transform: scale(1.1);
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+.task-drag-handle:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+.time-slot {
+  transition: background-color 0.2s ease;
+}
+
+.time-slot.drop-active {
+  background-color: rgba(59, 130, 246, 0.1);
+  border: 1px dashed #3b82f6;
+}
+
+.calendar-task-placeholder {
+  background-color: rgba(59, 130, 246, 0.2);
+  border: 1px dashed #3b82f6;
+  border-radius: 0.25rem;
+  animation: pulse 1.5s infinite;
+  pointer-events: none;
+}
+
+/* Tooltip styles */
+.task-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 5px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.task-tooltip-trigger:hover .task-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  z-index: 1000;
+}
+
+.task-tooltip-content {
+  background-color: #000;
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.task-tooltip-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 5px 0 5px;
+  border-color: #000 transparent transparent transparent;
+  bottom: -5px;
+  left: 10px;
+}
+
+/* Calendar task tooltip specific styles */
+.calendar-task-tooltip .task-tooltip-content {
+  white-space: normal;
+  text-align: left;
+}
+
+.calendar-task-tooltip .task-tooltip-content > div {
+  margin-bottom: 2px;
+}
+
+/* Make tooltips more visible in dark mode */
+.dark .task-tooltip-content {
+  background-color: #1e293b;
+  border: 1px solid #475569;
+}
+
+.dark .task-tooltip-arrow {
+  border-color: #1e293b transparent transparent transparent;
+}
+
+/* Tooltip arrow directions */
+.task-tooltip-arrow-down {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 5px 0 5px;
+  border-color: #000 transparent transparent transparent;
+  bottom: -5px;
+  left: 10px;
+}
+
+.task-tooltip-arrow-left {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 5px 5px 0;
+  border-color: transparent #000 transparent transparent;
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Dark mode arrow colors */
+.dark .task-tooltip-arrow-down {
+  border-color: #1e293b transparent transparent transparent;
+}
+
+.dark .task-tooltip-arrow-left {
+  border-color: transparent #1e293b transparent transparent;
 }
