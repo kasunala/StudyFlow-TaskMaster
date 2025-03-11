@@ -11,10 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, GripVertical, X } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, GripVertical, X, Trash2, Plus } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import TimeSelectionDialog from "./TimeSelectionDialog";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
 
 interface Task {
   id: string;
@@ -51,6 +58,7 @@ const EditAssignmentDialog = ({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [timeSelectionOpen, setTimeSelectionOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   // Initialize tasks when the dialog opens
   React.useEffect(() => {
@@ -192,42 +200,33 @@ const EditAssignmentDialog = ({
                   onChange={(e) => setDueDate(e.target.value)}
                   className="flex-1"
                 />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="ml-2"
-                  type="button"
-                  onClick={() => {
-                    // Create a date picker element
-                    const datePicker = document.createElement("input");
-                    datePicker.type = "date";
-                    datePicker.style.display = "none";
-                    document.body.appendChild(datePicker);
-
-                    // Set initial value if available
-                    if (dueDate) {
-                      datePicker.value = dueDate;
-                    }
-
-                    // Handle date selection
-                    datePicker.addEventListener("change", (e) => {
-                      setDueDate(datePicker.value);
-                      document.body.removeChild(datePicker);
-                    });
-
-                    // Open the date picker
-                    datePicker.click();
-
-                    // Clean up if dialog is closed without selecting
-                    datePicker.addEventListener("blur", () => {
-                      if (document.body.contains(datePicker)) {
-                        document.body.removeChild(datePicker);
-                      }
-                    });
-                  }}
-                >
-                  <Calendar className="h-4 w-4" />
-                </Button>
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="ml-2"
+                      type="button"
+                    >
+                      <CalendarIcon className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      mode="single"
+                      initialFocus
+                      selected={dueDate ? new Date(dueDate) : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          // Format date as YYYY-MM-DD
+                          const formattedDate = format(date, "yyyy-MM-dd");
+                          setDueDate(formattedDate);
+                          setCalendarOpen(false);
+                        }
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
