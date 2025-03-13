@@ -122,7 +122,6 @@ const DashboardHeader = ({
                 <AvatarImage src={userImage} alt={userEmail} />
                 <AvatarFallback>{userEmail[0].toUpperCase()}</AvatarFallback>
               </Avatar>
-              <span className="hidden md:inline-block">{userEmail}</span>
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
