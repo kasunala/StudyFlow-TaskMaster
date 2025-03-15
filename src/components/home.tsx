@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useNotification } from "@/contexts/NotificationContext";
 
 interface HomeProps {
   userTier?: "free" | "paid";
@@ -48,6 +49,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     toggleCalendarTask,
     updateCalendarTaskTime,
   } = useCalendar();
+  const { notificationSettings } = useNotification();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCalendar, setShowCalendar] = useState(true);
@@ -96,7 +98,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
   // Generate notifications from calendar tasks
   useEffect(() => {
-    const newNotifications = generateNotifications(calendarTasks, assignments);
+    const newNotifications = generateNotifications(calendarTasks, assignments, notificationSettings);
 
     // Preserve read status for existing notifications
     const updatedNotifications = newNotifications.map((notification) => ({
@@ -111,7 +113,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     if (unreadCount > 0 && !showNotifications) {
       // Optional: Flash the notification icon or show a toast
     }
-  }, [calendarTasks, assignments, readNotifications]);
+  }, [calendarTasks, assignments, readNotifications, notificationSettings]);
 
   const handleUpgradeClick = () => {
     setShowUpgradeDialog(true);
@@ -396,6 +398,10 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     }
   };
 
+  const handleSettingsClick = () => {
+    navigate("/settings");
+  };
+
   // Make sure we have the DndProvider at the top level
   let content = (
     <DndProvider backend={HTML5Backend}>
@@ -413,7 +419,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
           isDarkMode={theme === "dark"}
           onUpgradeClick={handleUpgradeClick}
           onLogout={handleLogout}
-          onSettingsClick={() => {}}
+          onSettingsClick={handleSettingsClick}
           onNotificationClick={toggleNotifications}
           onCalendarClick={toggleCalendar}
           onThemeToggle={toggleTheme}

@@ -1,5 +1,6 @@
 import { CalendarTask } from "@/contexts/CalendarContext";
 import { Assignment, Task } from "@/types/assignment";
+import { NotificationSettings } from "@/contexts/NotificationContext";
 
 export interface Notification {
   id: string;
@@ -11,9 +12,15 @@ export interface Notification {
   assignmentId: string;
 }
 
-// Function to check if a task is due within the next 12 hours
-export const isTaskDueSoon = (task: CalendarTask): boolean => {
+// Function to check if a task is due within the configured time range
+export const isTaskDueSoon = (
+  task: CalendarTask, 
+  settings: NotificationSettings
+): boolean => {
   if (!task.date || !task.startTime || task.completed) return false;
+
+  // Skip blocked time notifications if disabled in settings
+  if (task.isBlockedTime && !settings.enableBlockedTimeNotifications) return false;
 
   const now = new Date();
   // Create date object and handle timezone issues by using local timezone
@@ -28,21 +35,23 @@ export const isTaskDueSoon = (task: CalendarTask): boolean => {
   // Convert to hours
   const hoursDiff = timeDiff / (1000 * 60 * 60);
 
-  // Return true if the task is due within the next 12 hours (including overdue tasks within the last 12 hours)
-  return hoursDiff >= -12 && hoursDiff <= 12;
+  // Return true if the task is due within the configured time range
+  return hoursDiff >= -settings.notificationTimeRangeBefore && 
+         hoursDiff <= settings.notificationTimeRangeAfter;
 };
 
 // Function to generate notifications from calendar tasks
 export const generateNotifications = (
   calendarTasks: CalendarTask[],
   assignments: Assignment[],
+  settings: NotificationSettings
 ): Notification[] => {
-  // Filter tasks that are due within the next 12 hours and not completed
+  // Filter tasks that are due within the configured time range and not completed
   const upcomingTasks = calendarTasks
     .filter((task) => {
       // Log each task for debugging
       console.log("Checking task for notification:", task);
-      const result = isTaskDueSoon(task);
+      const result = isTaskDueSoon(task, settings);
       console.log("Is task due soon:", result);
       return result;
     })

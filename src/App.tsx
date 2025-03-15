@@ -3,12 +3,14 @@ import { useRoutes, Routes, Route, Navigate } from "react-router-dom";
 import Home from "./components/home";
 import Login from "./components/auth/Login";
 import ProfilePage from "./components/profile/ProfilePage";
+import SettingsPage from "./components/settings/SettingsPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AssignmentProvider } from "./contexts/AssignmentContext";
 import { CalendarProvider } from "./contexts/CalendarContext";
 import { TimeFormatProvider } from "./contexts/TimeFormatContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { UserProvider } from "./contexts/UserContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
 import routes from "tempo-routes";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -49,6 +51,14 @@ function AppRoutes() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/settings"
+            element={
+              <PrivateRoute>
+                <SettingsPage />
+              </PrivateRoute>
+            }
+          />
           {import.meta.env.VITE_TEMPO === "true" && (
             <Route path="/tempobook/*" />
           )}
@@ -67,7 +77,9 @@ function App() {
           <AssignmentProvider>
             <TimeFormatProvider>
               <CalendarProvider>
-                <AppRoutes />
+                <NotificationProvider>
+                  <AppRoutes />
+                </NotificationProvider>
               </CalendarProvider>
             </TimeFormatProvider>
           </AssignmentProvider>
