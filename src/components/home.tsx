@@ -53,6 +53,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCalendar, setShowCalendar] = useState(true);
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   const [showUpgradeDialog, setShowUpgradeDialog] = React.useState(false);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
@@ -342,11 +343,22 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     updateCalendarTaskTime(taskId, startTime, endTime, duration);
   };
 
-  const toggleNotifications = () => {
-    setShowNotifications(!showNotifications);
-    if (!showNotifications) {
+  const toggleFocusMode = () => {
+    setIsFocusMode(!isFocusMode);
+    // When entering focus mode, hide notifications and calendar
+    if (!isFocusMode) {
+      setShowNotifications(false);
       setShowCalendar(false);
     }
+  };
+
+  const toggleNotifications = () => {
+    // If in focus mode, exit focus mode first
+    if (isFocusMode) {
+      setIsFocusMode(false);
+    }
+    setShowCalendar(false);
+    setShowNotifications(!showNotifications);
   };
 
   const handleMarkNotificationAsRead = (id: string) => {
@@ -392,14 +404,32 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
   };
 
   const toggleCalendar = () => {
-    setShowCalendar(!showCalendar);
-    if (!showCalendar) {
-      setShowNotifications(false);
+    // If in focus mode, exit focus mode first
+    if (isFocusMode) {
+      setIsFocusMode(false);
     }
+    setShowNotifications(false);
+    setShowCalendar(!showCalendar);
   };
 
   const handleSettingsClick = () => {
     navigate("/settings");
+  };
+
+  // Focus Stage Component
+  const FocusStage = () => {
+    return (
+      <div className="flex-1 bg-background border border-border rounded-lg p-8 flex flex-col items-center justify-center min-h-[600px]">
+        <h2 className="text-3xl font-bold mb-6">Focus Mode</h2>
+        <p className="text-muted-foreground text-center max-w-md mb-8">
+          This is your distraction-free zone. The assignment cards and calendar have been hidden to help you concentrate.
+          This area will be enhanced with more focus features in future updates.
+        </p>
+        <div className="w-full max-w-md h-64 bg-muted rounded-lg flex items-center justify-center">
+          <p className="text-muted-foreground">Focus stage area for future modifications</p>
+        </div>
+      </div>
+    );
   };
 
   // Make sure we have the DndProvider at the top level
@@ -416,12 +446,14 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
           notificationCount={notifications.filter((n) => !n.isRead).length}
           showNotifications={showNotifications}
           showCalendar={showCalendar}
+          isFocusMode={isFocusMode}
           isDarkMode={theme === "dark"}
           onUpgradeClick={handleUpgradeClick}
           onLogout={handleLogout}
           onSettingsClick={handleSettingsClick}
           onNotificationClick={toggleNotifications}
           onCalendarClick={toggleCalendar}
+          onFocusClick={toggleFocusMode}
           onThemeToggle={toggleTheme}
         />
 
@@ -429,38 +461,44 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
           <div className="flex gap-6">
             {/* Main content area */}
             <div className="flex-1">
-              <AssignmentGrid
-                assignments={assignments}
-                calendarTasks={calendarTasks}
-                onCreateAssignment={handleCreateAssignment}
-                onDeleteAssignment={handleDeleteAssignment}
-                onTaskToggle={handleToggleTask}
-                onUpdateAssignment={handleUpdateAssignment}
-              />
+              {isFocusMode ? (
+                <FocusStage />
+              ) : (
+                <AssignmentGrid
+                  assignments={assignments}
+                  calendarTasks={calendarTasks}
+                  onCreateAssignment={handleCreateAssignment}
+                  onDeleteAssignment={handleDeleteAssignment}
+                  onTaskToggle={handleToggleTask}
+                  onUpdateAssignment={handleUpdateAssignment}
+                />
+              )}
             </div>
 
             {/* Right sidebar - either calendar or notifications */}
-            <div className="hidden lg:block w-[500px]">
-              {showCalendar && (
-                <CalendarPanel
-                  calendarTasks={calendarTasks}
-                  onAddTask={handleAddCalendarTask}
-                  onRemoveTask={handleRemoveCalendarTask}
-                  onToggleTask={handleToggleCalendarTask}
-                  onUpdateTaskTime={handleUpdateTaskTime}
-                />
-              )}
+            {!isFocusMode && (
+              <div className="hidden lg:block w-[500px]">
+                {showCalendar && (
+                  <CalendarPanel
+                    calendarTasks={calendarTasks}
+                    onAddTask={handleAddCalendarTask}
+                    onRemoveTask={handleRemoveCalendarTask}
+                    onToggleTask={handleToggleCalendarTask}
+                    onUpdateTaskTime={handleUpdateTaskTime}
+                  />
+                )}
 
-              {showNotifications && (
-                <NotificationPanel
-                  notifications={notifications}
-                  onMarkAsRead={handleMarkNotificationAsRead}
-                  onDismiss={handleDismissNotification}
-                  onViewTask={handleViewTask}
-                  onClearAll={handleClearAllNotifications}
-                />
-              )}
-            </div>
+                {showNotifications && (
+                  <NotificationPanel
+                    notifications={notifications}
+                    onMarkAsRead={handleMarkNotificationAsRead}
+                    onDismiss={handleDismissNotification}
+                    onViewTask={handleViewTask}
+                    onClearAll={handleClearAllNotifications}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </main>
 

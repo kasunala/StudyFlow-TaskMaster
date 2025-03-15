@@ -17,6 +17,7 @@ import {
   User,
   Moon,
   Sun,
+  Focus,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -27,12 +28,14 @@ interface DashboardHeaderProps {
   notificationCount?: number;
   showNotifications?: boolean;
   showCalendar?: boolean;
+  isFocusMode?: boolean;
   isDarkMode?: boolean;
   onUpgradeClick?: () => void;
   onLogout?: () => void;
   onSettingsClick?: () => void;
   onNotificationClick?: () => void;
   onCalendarClick?: () => void;
+  onFocusClick?: () => void;
   onThemeToggle?: () => void;
 }
 
@@ -43,12 +46,14 @@ const DashboardHeader = ({
   notificationCount = 3,
   showNotifications = false,
   showCalendar = true,
+  isFocusMode = false,
   isDarkMode = false,
   onUpgradeClick = () => {},
   onLogout = () => {},
   onSettingsClick = () => {},
   onNotificationClick = () => {},
   onCalendarClick = () => {},
+  onFocusClick = () => {},
   onThemeToggle = () => {},
 }: DashboardHeaderProps) => {
   const navigate = useNavigate();
@@ -66,6 +71,16 @@ const DashboardHeader = ({
 
       {/* Right side controls */}
       <div className="flex items-center space-x-4">
+        {/* Focus Mode Button */}
+        <Button
+          variant={isFocusMode ? "default" : "ghost"}
+          className="relative"
+          onClick={onFocusClick}
+          title={isFocusMode ? "Exit focus mode" : "Enter focus mode"}
+        >
+          <Focus className="h-5 w-5" />
+        </Button>
+
         {/* Upgrade Button (shown only for free tier) */}
         {isFreeTier && (
           <Button
