@@ -151,7 +151,7 @@ const OnboardingDialog = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Welcome to TaskMaster!</DialogTitle>
+            <DialogTitle>Welcome to AssignmentDays!</DialogTitle>
             <DialogDescription>
               {isFirstAssignment
                 ? "Let's create your first assignment to get started."

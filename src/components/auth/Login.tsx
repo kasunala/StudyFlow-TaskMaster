@@ -26,7 +26,7 @@ const Login = () => {
       <Card className="w-full max-w-md bg-white shadow-xl">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-primary">
-            TaskMaster
+            AssignmentDays
           </CardTitle>
           <CardDescription>
             Sign in to manage your assignments and tasks
@@ -35,7 +35,7 @@ const Login = () => {
         <CardContent className="flex flex-col items-center space-y-4">
           <img
             src="/vite.svg"
-            alt="TaskMaster Logo"
+            alt="AssignmentDays Logo"
             className="w-24 h-24 mb-4"
           />
           <Button
