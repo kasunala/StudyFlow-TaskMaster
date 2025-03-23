@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useNotification } from "@/contexts/NotificationContext";
+import YouTube from "@/components/focus/YouTubePlayer";
 
 interface HomeProps {
   userTier?: "free" | "paid";
@@ -423,10 +424,9 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
         <h2 className="text-3xl font-bold mb-6">Focus Mode</h2>
         <p className="text-muted-foreground text-center max-w-md mb-8">
           This is your distraction-free zone. The assignment cards and calendar have been hidden to help you concentrate.
-          This area will be enhanced with more focus features in future updates.
         </p>
-        <div className="w-full max-w-md h-64 bg-muted rounded-lg flex items-center justify-center">
-          <p className="text-muted-foreground">Focus stage area for future modifications</p>
+        <div className="w-full max-w-2xl">
+          <YouTube defaultVideoUrl="https://www.youtube.com/watch?v=1VUYq36Yu3o" />
         </div>
       </div>
     );
