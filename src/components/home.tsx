@@ -335,6 +335,43 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     };
   }, [showCalendar, setShowCalendar, setShowNotifications]);
 
+  // Listen for task-toggled-in-focus events
+  useEffect(() => {
+    const handleTaskToggledInFocus = (event: any) => {
+      console.log(
+        "Home component received task-toggled-in-focus event",
+        event.detail
+      );
+      const { taskId, assignmentId } = event.detail;
+      
+      // Update the task in the assignment
+      if (taskId && assignmentId) {
+        console.log(`Toggling task ${taskId} in assignment ${assignmentId}`);
+        
+        // Toggle the task in the assignment
+        handleToggleTask(assignmentId, taskId);
+        
+        // Also update the calendar task if it exists
+        const calendarTask = calendarTasks.find(task => task.id === taskId);
+        if (calendarTask) {
+          console.log("Found matching calendar task, toggling it as well");
+          handleToggleCalendarTask(taskId);
+        }
+        
+        // Force a UI refresh by dispatching a calendar update event
+        setTimeout(() => {
+          window.dispatchEvent(new Event('calendar-tasks-updated'));
+        }, 100);
+      }
+    };
+
+    window.addEventListener("task-toggled-in-focus", handleTaskToggledInFocus);
+
+    return () => {
+      window.removeEventListener("task-toggled-in-focus", handleTaskToggledInFocus);
+    };
+  }, [handleToggleTask, handleToggleCalendarTask, calendarTasks]);
+
   const handleUpdateTaskTime = (
     taskId: string,
     startTime: string,

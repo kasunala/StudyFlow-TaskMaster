@@ -93,6 +93,7 @@ const AssignmentCard = ({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
+  const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
 
   // Update local tasks when props change and ensure they're immediately draggable
   React.useEffect(() => {
@@ -138,10 +139,85 @@ const AssignmentCard = ({
     };
   }, [id]);
 
-  // Assignment cards are no longer draggable
-  const completedTasks = localTasks.filter((task) => task.completed).length;
-  const progress = (completedTasks / localTasks.length) * 100;
+  // Listen for task-toggled-in-focus events to update tasks completed in Focus mode
+  React.useEffect(() => {
+    const handleTaskToggledInFocus = (event: CustomEvent) => {
+      try {
+        const { taskId, assignmentId, completed } = event.detail;
+        
+        if (assignmentId === id) {
+          console.log("Assignment card received task-toggled-in-focus event:", event.detail);
+          
+          // Update the local task state directly
+          setLocalTasks(prevTasks => 
+            prevTasks.map(task => 
+              task.id === taskId ? { ...task, completed: completed } : task
+            )
+          );
+          
+          // Force a rerender by incrementing the counter
+          setForceUpdateCounter(prev => prev + 1);
+        }
+      } catch (error) {
+        console.error("Error handling task-toggled-in-focus event:", error);
+      }
+    };
 
+    // Add event listener
+    window.addEventListener("task-toggled-in-focus", handleTaskToggledInFocus as EventListener);
+
+    // Clean up
+    return () => {
+      window.removeEventListener(
+        "task-toggled-in-focus",
+        handleTaskToggledInFocus as EventListener,
+      );
+    };
+  }, [id]);
+
+  // Listen for calendar-tasks-updated events to refresh the card
+  React.useEffect(() => {
+    const handleCalendarTasksUpdated = () => {
+      console.log("Assignment card received calendar-tasks-updated event, refreshing tasks for:", id);
+      
+      // Force refresh of local tasks from props
+      setLocalTasks([...tasks]);
+      
+      // Force a rerender by incrementing the counter
+      setForceUpdateCounter(prev => prev + 1);
+    };
+
+    window.addEventListener("calendar-tasks-updated", handleCalendarTasksUpdated);
+
+    return () => {
+      window.removeEventListener("calendar-tasks-updated", handleCalendarTasksUpdated);
+    };
+  }, [id, tasks]);
+
+  // Debug logging for the force update counter
+  React.useEffect(() => {
+    console.log(`Assignment card ${id} force updated, counter: ${forceUpdateCounter}`);
+  }, [forceUpdateCounter, id]);
+
+  // Calculate completed tasks considering both local task state and calendar task state
+  const completedTasks = localTasks.filter((task) => {
+    // Check if task is completed in local state
+    if (task.completed) return true;
+    
+    // Also check if task is completed in calendar tasks
+    const calendarTask = calendarTasks.find(ct => ct.id === task.id);
+    
+    // Debug individual task completion status
+    console.log(`Task ${task.id} "${task.title}": Local completed=${task.completed}, Calendar completed=${calendarTask?.completed || false}`);
+    
+    return calendarTask ? calendarTask.completed : false;
+  }).length;
+  
+  const progress = localTasks.length > 0 ? (completedTasks / localTasks.length) * 100 : 0;
+  
+  // Debug logging for progress calculation
+  console.log(`Assignment ${id} progress: ${completedTasks}/${localTasks.length} = ${progress.toFixed(2)}%`);
+  
   // Function to move a task from one position to another
   const moveTask = (fromIndex: number, toIndex: number) => {
     const updatedTasks = [...localTasks];
@@ -338,6 +414,10 @@ const TaskItem = React.memo(({
     }
   }, [dragRef, task.id]);
 
+  // Check if there's a corresponding calendar task and if it's completed
+  const calendarTask = calendarTasks.find(t => t.id === task.id);
+  const isCompleted = task.completed || (calendarTask ? calendarTask.completed : false);
+
   return (
     <div
       ref={taskElementRef}
@@ -346,12 +426,13 @@ const TaskItem = React.memo(({
       style={{
         cursor: "grab",
       }}
+
     >
       <div className="flex items-center space-x-2 flex-grow">
         <Checkbox
           id={task.id}
           data-task-id={task.id}
-          checked={task.completed}
+          checked={isCompleted}
           onCheckedChange={() => onTaskToggle(task.id)}
         />
         <div className="flex items-center flex-grow">
@@ -502,7 +583,7 @@ const TaskItem = React.memo(({
           )}
           <label
             htmlFor={task.id}
-            className={`text-sm flex-grow ${task.completed ? "line-through text-gray-500 dark:text-gray-400" : ""}`}
+            className={`text-sm flex-grow ${isCompleted ? "line-through text-gray-500 dark:text-gray-400" : ""}`}
           >
             {task.title}
           </label>
@@ -531,3 +612,4 @@ const TaskItem = React.memo(({
 });
 
 export default AssignmentCard;
+
