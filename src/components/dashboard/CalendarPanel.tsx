@@ -149,6 +149,20 @@ const CalendarPanel = ({
   // State for current time indicator
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // State for managing UI
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<CalendarTask | null>(null);
+  const [draggedTask, setDraggedTask] = useState<CalendarTask | null>(null);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [contextMenuTask, setContextMenuTask] = useState<CalendarTask | null>(null);
+  
+  // Add a force update counter for gentle refreshes from focus mode
+  const [forceUpdateCounter, setForceUpdateCounter] = useState<number>(0);
+  
+  // Create a ref to store current date to avoid stale closures
+  const currentDateRef = useRef<Date>(internalSelectedDate);
+
   // Update current time every minute
   useEffect(() => {
     // Set initial time immediately
@@ -444,9 +458,23 @@ const CalendarPanel = ({
 
   // Listen for calendar-tasks-updated events
   useEffect(() => {
-    const handleCalendarTasksUpdated = () => {
-      console.log("Calendar tasks updated event received, refreshing view");
-      // Force a re-render by updating a state variable
+    const handleCalendarTasksUpdated = (event: Event) => {
+      console.log("Calendar tasks updated event received");
+      
+      // Check if the event is from focus mode
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail && customEvent.detail.fromFocusMode) {
+        console.log("Update from focus mode, preserving video player state");
+        // We still want to update the UI, but gently without triggering a full rerender
+        // that would affect the YouTube player in focus mode
+        
+        // Use a gentle approach to update just what's needed
+        setForceUpdateCounter(prevState => prevState + 1);
+      } else {
+        // For normal updates, we can do a regular state refresh
+        setInternalSelectedDate(new Date(currentDateRef.current));
+      }
+      
       setHoveredTimeSlot(null);
     };
 
@@ -456,6 +484,18 @@ const CalendarPanel = ({
       window.removeEventListener("calendar-tasks-updated", handleCalendarTasksUpdated);
     };
   }, []);
+
+  // Update the ref when internalSelectedDate changes
+  useEffect(() => {
+    currentDateRef.current = internalSelectedDate;
+  }, [internalSelectedDate]);
+  
+  // Optional: Debug logging for force updates
+  useEffect(() => {
+    if (forceUpdateCounter > 0) {
+      console.log(`Calendar panel gentle update #${forceUpdateCounter} from focus mode`);
+    }
+  }, [forceUpdateCounter]);
 
   // Listen for calendar-task-overlap events
   useEffect(() => {

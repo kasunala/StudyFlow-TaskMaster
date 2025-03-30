@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,8 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   const [upcomingTasks, setUpcomingTasks] = useState<CalendarTask[]>([]);
   const [remainingTime, setRemainingTime] = useState<string>("");
   const [taskExpired, setTaskExpired] = useState<boolean>(false);
+  // Ref to preserve video player state between renders
+  const videoPlayerRef = useRef<HTMLIFrameElement | null>(null);
   
   // Get calendar tasks and notification settings
   const { calendarTasks, toggleCalendarTask } = useCalendar();
@@ -193,8 +195,8 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     return () => clearInterval(interval);
   }, [currentTask, upcomingTasks]);
   
-  // Handle completing a task
-  const handleCompleteTask = () => {
+  // Handle completing a task - modified to prevent video refresh
+  const handleCompleteTask = useCallback(() => {
     if (currentTask) {
       console.log(`Completing task ${currentTask.id} in focus mode`);
       
@@ -214,16 +216,41 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
       );
       
       // Force a UI refresh by dispatching a calendar update event
+      // but with a flag indicating it's from focus mode to prevent video refresh
       setTimeout(() => {
-        window.dispatchEvent(new Event('calendar-tasks-updated'));
+        window.dispatchEvent(
+          new CustomEvent('calendar-tasks-updated', {
+            detail: { fromFocusMode: true }
+          })
+        );
       }, 100);
       
-      // Move to the next task if available
+      // Handle next task without refreshing the video
       if (upcomingTasks.length > 0) {
-        moveToNextTask();
+        // Update state without refreshing the video
+        setCurrentTask(upcomingTasks[0]);
+        setUpcomingTasks(prev => prev.slice(1));
+        
+        // Still dispatch the focus event for other components
+        window.dispatchEvent(
+          new CustomEvent("focus-calendar-task", {
+            detail: { 
+              taskId: upcomingTasks[0].id,
+              date: upcomingTasks[0].date,
+              startTime: upcomingTasks[0].startTime,
+              assignmentId: upcomingTasks[0].assignmentId,
+              assignmentTitle: upcomingTasks[0].assignmentTitle,
+              taskTitle: upcomingTasks[0].title,
+            },
+          })
+        );
+        console.log("Moving to next task:", upcomingTasks[0].title);
+      } else {
+        // If no more tasks, just update current task to null
+        setCurrentTask(null);
       }
     }
-  };
+  }, [currentTask, toggleCalendarTask, upcomingTasks]);
   
   // Move to next task
   const moveToNextTask = () => {
@@ -246,9 +273,13 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
           })
         );
         
-        // Force a UI refresh
+        // Force a UI refresh but with a flag to prevent video refreshing
         setTimeout(() => {
-          window.dispatchEvent(new Event('calendar-tasks-updated'));
+          window.dispatchEvent(
+            new CustomEvent('calendar-tasks-updated', {
+              detail: { fromFocusMode: true }
+            })
+          );
         }, 100);
       }
       
@@ -438,16 +469,18 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* YouTube embed iframe */}
+        {/* YouTube embed iframe - using ref to maintain state */}
         <div className="aspect-video w-full mb-4">
           {embedUrl && (
             <iframe
+              ref={videoPlayerRef}
               src={embedUrl}
               title="YouTube video player"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               className="w-full h-full rounded-md"
+              key="youtube-player-iframe" // Use a fixed key to prevent recreation
             ></iframe>
           )}
         </div>

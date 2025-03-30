@@ -177,11 +177,16 @@ const AssignmentCard = ({
 
   // Listen for calendar-tasks-updated events to refresh the card
   React.useEffect(() => {
-    const handleCalendarTasksUpdated = () => {
-      console.log("Assignment card received calendar-tasks-updated event, refreshing tasks for:", id);
+    const handleCalendarTasksUpdated = (event: Event) => {
+      console.log(`Assignment card ${id} handling calendar tasks updated`);
       
-      // Force refresh of local tasks from props
-      setLocalTasks([...tasks]);
+      // Check if the event is from focus mode
+      const customEvent = event as CustomEvent;
+      const isFromFocusMode = customEvent.detail && customEvent.detail.fromFocusMode;
+      
+      if (isFromFocusMode) {
+        console.log(`Focus mode update for assignment ${id}, using gentle refresh`);
+      }
       
       // Force a rerender by incrementing the counter
       setForceUpdateCounter(prev => prev + 1);
@@ -192,7 +197,7 @@ const AssignmentCard = ({
     return () => {
       window.removeEventListener("calendar-tasks-updated", handleCalendarTasksUpdated);
     };
-  }, [id, tasks]);
+  }, [id]);
 
   // Debug logging for the force update counter
   React.useEffect(() => {
