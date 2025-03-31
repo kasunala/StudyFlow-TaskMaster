@@ -51,7 +51,7 @@ interface CalendarContextType {
   calendarTasks: CalendarTask[];
   addCalendarTask: (task: CalendarTask) => Promise<void>;
   removeCalendarTask: (taskId: string) => Promise<void>;
-  toggleCalendarTask: (taskId: string) => Promise<void>;
+  toggleCalendarTask: (taskId: string, forceState?: boolean) => Promise<void>;
   updateCalendarTaskTime: (
     taskId: string,
     startTime: string,
@@ -179,7 +179,7 @@ export const CalendarProvider = ({
     }
   };
 
-  const toggleCalendarTask = async (taskId: string) => {
+  const toggleCalendarTask = async (taskId: string, forceState?: boolean) => {
     if (!currentUser) return;
 
     try {
@@ -187,10 +187,14 @@ export const CalendarProvider = ({
       const taskToUpdate = calendarTasks.find((task) => task.id === taskId);
       if (!taskToUpdate) return;
 
+      // Determine the new completed state
+      // If forceState is provided, use it; otherwise toggle the current state
+      const newCompletedState = forceState !== undefined ? forceState : !taskToUpdate.completed;
+
       // Create updated task object
       const updatedTask = {
         ...taskToUpdate,
-        completed: !taskToUpdate.completed,
+        completed: newCompletedState,
         updatedAt: new Date().toISOString(),
       };
 

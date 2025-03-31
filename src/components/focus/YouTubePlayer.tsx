@@ -252,6 +252,38 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     }
   }, [currentTask, toggleCalendarTask, upcomingTasks]);
   
+  // Handle uncompleting a task - fix for uncomplete task issue
+  const handleUncompleteTask = useCallback(() => {
+    if (currentTask) {
+      console.log(`Uncompleting task ${currentTask.id} in focus mode`);
+      
+      // Mark task as not completed in calendar
+      toggleCalendarTask(currentTask.id);
+      
+      // Also sync with the assignment task by dispatching a custom event
+      // This will ensure the assignment card is updated with the correct status
+      window.dispatchEvent(
+        new CustomEvent("task-toggled-in-focus", {
+          detail: { 
+            taskId: currentTask.id,
+            assignmentId: currentTask.assignmentId,
+            completed: false
+          },
+        })
+      );
+      
+      // Force a UI refresh by dispatching a calendar update event
+      // but with a flag indicating it's from focus mode to prevent video refresh
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('calendar-tasks-updated', {
+            detail: { fromFocusMode: true }
+          })
+        );
+      }, 100);
+    }
+  }, [currentTask, toggleCalendarTask]);
+  
   // Move to next task
   const moveToNextTask = () => {
     if (upcomingTasks.length > 0) {
@@ -391,15 +423,27 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                   <div className="text-lg font-mono font-bold text-primary px-3 py-1 rounded-md bg-primary/10">
                     {remainingTime}
                   </div>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="flex items-center gap-1 text-green-600 hover:bg-green-50 hover:text-green-700 border-green-200"
-                    onClick={handleCompleteTask}
-                  >
-                    <CheckCircle size={16} />
-                    <span>Complete</span>
-                  </Button>
+                  {currentTask.completed ? (
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="flex items-center gap-1 text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"
+                      onClick={handleUncompleteTask}
+                    >
+                      <CheckCircle size={16} className="text-orange-600" />
+                      <span>Uncomplete</span>
+                    </Button>
+                  ) : (
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="flex items-center gap-1 text-green-600 hover:bg-green-50 hover:text-green-700 border-green-200"
+                      onClick={handleCompleteTask}
+                    >
+                      <CheckCircle size={16} />
+                      <span>Complete</span>
+                    </Button>
+                  )}
                 </div>
               </div>
               {taskExpired && upcomingTasks.length > 0 && (

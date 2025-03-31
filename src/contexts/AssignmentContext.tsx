@@ -39,7 +39,7 @@ interface AssignmentContextType {
   setIsFirstLogin: (value: boolean) => void;
   createAssignment: (assignment: Omit<Assignment, "id">) => Promise<void>;
   deleteAssignment: (id: string) => Promise<void>;
-  toggleTask: (assignmentId: string, taskId: string) => Promise<void>;
+  toggleTask: (assignmentId: string, taskId: string, forceState?: boolean) => Promise<void>;
   updateAssignment: (assignment: Assignment) => Promise<void>;
 }
 
@@ -151,7 +151,7 @@ const AssignmentProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const toggleTask = async (assignmentId: string, taskId: string) => {
+  const toggleTask = async (assignmentId: string, taskId: string, forceState?: boolean) => {
     if (!currentUser) return;
 
     try {
@@ -164,7 +164,9 @@ const AssignmentProvider = ({ children }: { children: React.ReactNode }) => {
         ...assignmentToUpdate,
         tasks: assignmentToUpdate.tasks.map((task) => {
           if (task.id === taskId) {
-            return { ...task, completed: !task.completed };
+            // If forceState is provided, use it; otherwise toggle the current state
+            const newCompletedState = forceState !== undefined ? forceState : !task.completed;
+            return { ...task, completed: newCompletedState };
           }
           return task;
         }),

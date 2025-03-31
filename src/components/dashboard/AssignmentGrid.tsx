@@ -35,7 +35,7 @@ interface AssignmentGridProps {
   calendarTasks?: CalendarTask[];
   onCreateAssignment?: () => void;
   onDeleteAssignment?: (id: string) => void;
-  onTaskToggle?: (assignmentId: string, taskId: string) => void;
+  onTaskToggle?: (assignmentId: string, taskId: string, forceState?: boolean) => void;
   onUpdateAssignment?: (assignment: Assignment) => void;
 }
 

@@ -51,7 +51,7 @@ interface AssignmentCardProps {
   dueDate?: string;
   tasks?: Task[];
   calendarTasks?: CalendarTask[];
-  onTaskToggle?: (taskId: string) => void;
+  onTaskToggle?: (taskId: string, forceState?: boolean) => void;
   onDelete?: () => void;
   onUpdateAssignment?: (assignment: {
     id: string;
@@ -146,17 +146,33 @@ const AssignmentCard = ({
         const { taskId, assignmentId, completed } = event.detail;
         
         if (assignmentId === id) {
-          console.log("Assignment card received task-toggled-in-focus event:", event.detail);
+          console.log(`Assignment card ${id} received task-toggled-in-focus event:`, event.detail);
           
-          // Update the local task state directly
-          setLocalTasks(prevTasks => 
-            prevTasks.map(task => 
-              task.id === taskId ? { ...task, completed: completed } : task
-            )
-          );
+          // First check if the task exists and if it's already in the desired state
+          const existingTask = localTasks.find(task => task.id === taskId);
           
-          // Force a rerender by incrementing the counter
-          setForceUpdateCounter(prev => prev + 1);
+          if (existingTask) {
+            console.log(`Task ${taskId} current state=${existingTask.completed}, target state=${completed}`);
+            
+            // Only update if the state is actually different
+            if (existingTask.completed !== completed) {
+              console.log(`Updating local task state for ${taskId} to ${completed}`);
+              
+              // Update the local task state directly with the explicit completed state
+              setLocalTasks(prevTasks => 
+                prevTasks.map(task => 
+                  task.id === taskId ? { ...task, completed: completed } : task
+                )
+              );
+              
+              // Force a rerender by incrementing the counter
+              setForceUpdateCounter(prev => prev + 1);
+            } else {
+              console.log(`Task ${taskId} already in correct state (${completed}), no update needed`);
+            }
+          } else {
+            console.log(`Task ${taskId} not found in assignment card ${id}, can't update`);
+          }
         }
       } catch (error) {
         console.error("Error handling task-toggled-in-focus event:", error);
@@ -173,22 +189,53 @@ const AssignmentCard = ({
         handleTaskToggledInFocus as EventListener,
       );
     };
-  }, [id]);
+  }, [id, localTasks]);
 
   // Listen for calendar-tasks-updated events to refresh the card
   React.useEffect(() => {
+    // Track last known states to prevent redundant updates
+    const lastKnownTaskStates = new Map<string, boolean>();
+    
     const handleCalendarTasksUpdated = (event: Event) => {
       console.log(`Assignment card ${id} handling calendar tasks updated`);
       
       // Check if the event is from focus mode
       const customEvent = event as CustomEvent;
       const isFromFocusMode = customEvent.detail && customEvent.detail.fromFocusMode;
+      const taskId = customEvent.detail?.taskId;
+      const completedState = customEvent.detail?.completed;
       
       if (isFromFocusMode) {
         console.log(`Focus mode update for assignment ${id}, using gentle refresh`);
+        
+        // If we have task details in the event, only update that specific task
+        if (taskId) {
+          // Check if we already know about this state
+          const lastKnownState = lastKnownTaskStates.get(taskId);
+          if (lastKnownState === completedState) {
+            console.log(`Skipping redundant update for task ${taskId}: state already ${completedState}`);
+            return;
+          }
+          
+          console.log(`Updating specific task ${taskId} to completed=${completedState}`);
+          
+          // Update the task locally without triggering a full state refresh
+          setLocalTasks(prevTasks => 
+            prevTasks.map(task => 
+              task.id === taskId ? { ...task, completed: completedState } : task
+            )
+          );
+          
+          // Remember this state to avoid loops
+          lastKnownTaskStates.set(taskId, completedState);
+          
+          // Just update the counter to force minimal re-render
+          setForceUpdateCounter(prev => prev + 1);
+          return;
+        }
       }
       
-      // Force a rerender by incrementing the counter
+      // For other updates, proceed with normal refresh
       setForceUpdateCounter(prev => prev + 1);
     };
 
@@ -351,7 +398,7 @@ const TaskItem = React.memo(({
   assignmentId: string;
   assignmentTitle: string;
   calendarTasks: CalendarTask[];
-  onTaskToggle: (taskId: string) => void;
+  onTaskToggle: (taskId: string, forceState?: boolean) => void;
 }) => {
   // Create a ref for the task element
   const taskElementRef = React.useRef<HTMLDivElement>(null);
@@ -422,6 +469,33 @@ const TaskItem = React.memo(({
   // Check if there's a corresponding calendar task and if it's completed
   const calendarTask = calendarTasks.find(t => t.id === task.id);
   const isCompleted = task.completed || (calendarTask ? calendarTask.completed : false);
+  
+  // Keep track of the last toggled state to prevent double toggles
+  const lastToggledRef = useRef(isCompleted);
+  
+  // Update lastToggledRef when isCompleted changes due to external updates
+  // This ensures the ref stays in sync with actual state
+  React.useEffect(() => {
+    console.log(`Task ${task.id} external state change detected - updating ref to: ${isCompleted}`);
+    lastToggledRef.current = isCompleted;
+  }, [task.id, isCompleted]);
+
+  // Handle checkbox change
+  const handleCheckboxChange = (checked: boolean | string) => {
+    // Convert to boolean
+    const newState = checked === true;
+    
+    console.log(`Task ${task.id} checkbox changed to ${newState}, current state is ${isCompleted}, ref is ${lastToggledRef.current}`);
+    
+    // Force the update regardless of local ref state to ensure user input is respected
+    console.log(`Applying user-initiated change for task ${task.id}: ${isCompleted} -> ${newState}`);
+    
+    // Update ref to track this change
+    lastToggledRef.current = newState;
+    
+    // Call the parent component's toggle function with the explicit new state
+    onTaskToggle(task.id, newState);
+  };
 
   return (
     <div
@@ -438,7 +512,7 @@ const TaskItem = React.memo(({
           id={task.id}
           data-task-id={task.id}
           checked={isCompleted}
-          onCheckedChange={() => onTaskToggle(task.id)}
+          onCheckedChange={handleCheckboxChange}
         />
         <div className="flex items-center flex-grow">
           {calendarTasks.some(

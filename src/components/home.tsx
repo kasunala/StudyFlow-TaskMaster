@@ -166,23 +166,61 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     removeCalendarTask(taskId);
   };
 
-  const handleToggleTask = (assignmentId: string, taskId: string) => {
-    toggleTask(assignmentId, taskId);
-
-    // Find if this task exists in calendar tasks and update it there too
-    const calendarTask = calendarTasks.find((task) => task.id === taskId);
-    if (calendarTask) {
-      toggleCalendarTask(taskId);
+  const handleToggleTask = (assignmentId: string, taskId: string, forceState?: boolean) => {
+    console.log(`handleToggleTask: ${assignmentId}, ${taskId}, forceState=${forceState}`);
+    
+    // Find the current task to determine if this is a user-initiated toggle in the assignment card
+    const assignment = assignments.find(a => a.id === assignmentId);
+    const task = assignment?.tasks.find(t => t.id === taskId);
+    
+    if (task) {
+      const currentState = task.completed;
+      const newState = forceState !== undefined ? forceState : !currentState;
+      console.log(`Task ${taskId} toggling from ${currentState} to ${newState}`);
+      
+      // Always use explicit state to avoid toggle confusion
+      toggleTask(assignmentId, taskId, newState);
+      
+      // Find if this task exists in calendar tasks and update it there too
+      const calendarTask = calendarTasks.find((t) => t.id === taskId);
+      if (calendarTask) {
+        handleToggleCalendarTask(taskId, newState);
+      }
+    } else {
+      // Fallback to original behavior if task not found
+      toggleTask(assignmentId, taskId, forceState);
     }
   };
 
-  const handleToggleCalendarTask = (taskId: string) => {
-    toggleCalendarTask(taskId);
-
-    // Find which assignment this task belongs to and toggle it there too
-    const calendarTask = calendarTasks.find((task) => task.id === taskId);
+  const handleToggleCalendarTask = (taskId: string, forceState?: boolean) => {
+    console.log(`handleToggleCalendarTask: ${taskId}, forceState=${forceState}`);
+    
+    // Find the current task to log the state change
+    const calendarTask = calendarTasks.find(task => task.id === taskId);
+    
     if (calendarTask) {
-      toggleTask(calendarTask.assignmentId, taskId);
+      const currentState = calendarTask.completed;
+      const newState = forceState !== undefined ? forceState : !currentState;
+      console.log(`Calendar task ${taskId} toggling from ${currentState} to ${newState}`);
+      
+      // Always use explicit state to avoid toggle confusion
+      toggleCalendarTask(taskId, newState);
+      
+      // If necessary, also update the assignment task
+      if (calendarTask.assignmentId) {
+        // Only toggle the assignment task if it's not already being toggled
+        // to avoid circular updates
+        const assignment = assignments.find(a => a.id === calendarTask.assignmentId);
+        const task = assignment?.tasks.find(t => t.id === taskId);
+        
+        if (task && task.completed !== newState) {
+          console.log(`Syncing assignment task state with calendar task: ${taskId}`);
+          toggleTask(calendarTask.assignmentId, taskId, newState);
+        }
+      }
+    } else {
+      // Fallback to original behavior if task not found
+      toggleCalendarTask(taskId, forceState);
     }
   };
 
@@ -337,30 +375,74 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
 
   // Listen for task-toggled-in-focus events
   useEffect(() => {
+    // Keep track of tasks being processed to avoid circular updates
+    const tasksBeingProcessed = new Set<string>();
+    
     const handleTaskToggledInFocus = (event: any) => {
       console.log(
         "Home component received task-toggled-in-focus event",
         event.detail
       );
-      const { taskId, assignmentId } = event.detail;
+      const { taskId, assignmentId, completed } = event.detail;
       
-      // Update the task in the assignment
+      // Generate a unique key for this task update
+      const updateKey = `${taskId}-${completed}`;
+      
+      // If this task is already being processed, skip to avoid loops
+      if (tasksBeingProcessed.has(updateKey)) {
+        console.log(`Task ${taskId} is already being processed, skipping to avoid loops`);
+        return;
+      }
+      
+      // Add to processing set
+      tasksBeingProcessed.add(updateKey);
+      
+      // Check if the assignment task already has the correct state
+      const assignment = assignments.find(a => a.id === assignmentId);
+      const task = assignment?.tasks.find(t => t.id === taskId);
+      
+      // Do the same check for calendar task
+      const calendarTask = calendarTasks.find(task => task.id === taskId);
+      
+      // Update the task in the assignment if needed
       if (taskId && assignmentId) {
-        console.log(`Toggling task ${taskId} in assignment ${assignmentId}`);
+        console.log(`Focus mode: Task ${taskId} in assignment ${assignmentId} change to completed=${completed}`);
         
-        // Toggle the task in the assignment
-        handleToggleTask(assignmentId, taskId);
-        
-        // Also update the calendar task if it exists
-        const calendarTask = calendarTasks.find(task => task.id === taskId);
-        if (calendarTask) {
-          console.log("Found matching calendar task, toggling it as well");
-          handleToggleCalendarTask(taskId);
+        // Only update assignment if state is different
+        if (!task || task.completed !== completed) {
+          console.log(`Updating assignment task state: ${taskId}`);
+          // Always pass explicit completed state
+          toggleTask(assignmentId, taskId, completed);
+        } else {
+          console.log(`Assignment task ${taskId} already in correct state (${completed}), skipping update`);
         }
         
-        // Force a UI refresh by dispatching a calendar update event
+        // Update calendar task if it exists and state is different
+        if (calendarTask && calendarTask.completed !== completed) {
+          console.log(`Updating calendar task state: ${taskId} to ${completed}`);
+          toggleCalendarTask(taskId, completed);
+        } else if (calendarTask) {
+          console.log(`Calendar task ${taskId} already in correct state (${completed}), skipping update`);
+        }
+        
+        // Force a UI refresh with custom event containing task info
         setTimeout(() => {
-          window.dispatchEvent(new Event('calendar-tasks-updated'));
+          window.dispatchEvent(
+            new CustomEvent('calendar-tasks-updated', {
+              detail: { 
+                fromFocusMode: true, 
+                taskId, 
+                completed,
+                source: 'focus-mode'
+              }
+            })
+          );
+          
+          // Remove from processing set after a delay to allow all updates to complete
+          setTimeout(() => {
+            tasksBeingProcessed.delete(updateKey);
+            console.log(`Task ${taskId} processing complete, removed from tracking`);
+          }, 500);
         }, 100);
       }
     };
@@ -370,7 +452,7 @@ const Home = ({ userTier: propUserTier }: HomeProps) => {
     return () => {
       window.removeEventListener("task-toggled-in-focus", handleTaskToggledInFocus);
     };
-  }, [handleToggleTask, handleToggleCalendarTask, calendarTasks]);
+  }, [assignments, calendarTasks, toggleTask, toggleCalendarTask]);
 
   const handleUpdateTaskTime = (
     taskId: string,
